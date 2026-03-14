@@ -1,22 +1,43 @@
 package com.tst.psychAnalysis.response;
 
+import java.util.List;
 import java.util.Map;
 
 public class ResultResponse {
 
+    /** 실시한 검사명 */
+    private final String assessmentName;
     private final Double totalRawScore;
     private final Double totalTScore;
     private final Map<String, Double> scaleRawScores;
     private final Map<String, Double> scaleTScores;
+    /** 척도 표시 순서 (검사별 DB scale id 순) */
+    private final List<String> scaleOrder;
+    /** 척도 한글명 (code -> 한글). 검사별 scale.name 사용 */
+    private final Map<String, String> scaleDisplayNames;
+    /** 척도별 점수 해석 (code -> 해석 문장). TCI만 제공 */
+    private final Map<String, String> scaleInterpretations;
 
-    public ResultResponse(Double totalRawScore,
+    public ResultResponse(String assessmentName,
+                          Double totalRawScore,
                           Double totalTScore,
                           Map<String, Double> scaleRawScores,
-                          Map<String, Double> scaleTScores) {
+                          Map<String, Double> scaleTScores,
+                          List<String> scaleOrder,
+                          Map<String, String> scaleDisplayNames,
+                          Map<String, String> scaleInterpretations) {
+        this.assessmentName = assessmentName != null ? assessmentName : "";
         this.totalRawScore = totalRawScore;
         this.totalTScore = totalTScore;
         this.scaleRawScores = scaleRawScores;
         this.scaleTScores = scaleTScores;
+        this.scaleOrder = scaleOrder != null ? scaleOrder : List.of();
+        this.scaleDisplayNames = scaleDisplayNames != null ? scaleDisplayNames : Map.of();
+        this.scaleInterpretations = scaleInterpretations != null ? scaleInterpretations : Map.of();
+    }
+
+    public String getAssessmentName() {
+        return assessmentName;
     }
 
     public Double getTotalRawScore() {
@@ -33,6 +54,18 @@ public class ResultResponse {
 
     public Map<String, Double> getScaleTScores() {
         return scaleTScores;
+    }
+
+    public List<String> getScaleOrder() {
+        return scaleOrder;
+    }
+
+    public Map<String, String> getScaleDisplayNames() {
+        return scaleDisplayNames;
+    }
+
+    public Map<String, String> getScaleInterpretations() {
+        return scaleInterpretations;
     }
 }
 

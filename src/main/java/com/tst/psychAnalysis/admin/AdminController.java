@@ -6,11 +6,15 @@ import com.tst.psychAnalysis.common.ApiResponse;
 import com.tst.psychAnalysis.response.ResponseSessionRepository;
 import com.tst.psychAnalysis.response.ResultRepository;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -22,22 +26,28 @@ public class AdminController {
     private final AdminAuthService authService;
     private final ResponseSessionRepository responseSessionRepository;
     private final ResultRepository resultRepository;
-    private final AccessLogRepository accessLogRepository;
+    private final AccessLogCountRepository accessLogCountRepository;
     private final ObjectMapper objectMapper;
     private final StatisticsService statisticsService;
+    private final AdminReferenceService adminReferenceService;
+    private final AdminReportPdfService adminReportPdfService;
 
     public AdminController(AdminAuthService authService,
                            ResponseSessionRepository responseSessionRepository,
                            ResultRepository resultRepository,
-                           AccessLogRepository accessLogRepository,
+                           AccessLogCountRepository accessLogCountRepository,
                            ObjectMapper objectMapper,
-                           StatisticsService statisticsService) {
+                           StatisticsService statisticsService,
+                           AdminReferenceService adminReferenceService,
+                           AdminReportPdfService adminReportPdfService) {
         this.authService = authService;
         this.responseSessionRepository = responseSessionRepository;
         this.resultRepository = resultRepository;
-        this.accessLogRepository = accessLogRepository;
+        this.accessLogCountRepository = accessLogCountRepository;
         this.objectMapper = objectMapper;
         this.statisticsService = statisticsService;
+        this.adminReferenceService = adminReferenceService;
+        this.adminReportPdfService = adminReportPdfService;
     }
 
     @PostMapping("/login")
@@ -71,7 +81,7 @@ public class AdminController {
     }
 
     @GetMapping("/access-logs")
-    public ApiResponse<List<AccessLog>> accessLogs(
+    public ApiResponse<List<AccessLogCount>> accessLogs(
             @RequestHeader("X-Admin-Token") String token,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -82,7 +92,10 @@ public class AdminController {
             throw new IllegalArgumentException("인증이 필요합니다.");
         }
 
-        List<AccessLog> logs = accessLogRepository.findAll();
+        LocalDate fromDate = from != null ? from : LocalDate.now().minusDays(30);
+        LocalDate toDate = to != null ? to : LocalDate.now();
+        List<AccessLogCount> logs = accessLogCountRepository
+                .findByLogDateBetweenOrderByLogDateDescClientIpMaskedAscEventTypeAsc(fromDate, toDate);
 
         return ApiResponse.success(logs);
     }
@@ -98,10 +111,12 @@ public class AdminController {
         List<AdminResponseSummary> summaries = resultRepository.findAll().stream()
                 .map(result -> {
                     var session = result.getResponseSession();
+                    String assessmentName = session.getAssessment() != null ? session.getAssessment().getName() : null;
                     return new AdminResponseSummary(
                             session.getId(),
                             session.getSubmittedAt(),
                             session.getGroupCode(),
+                            assessmentName,
                             result.getTotalRawScore(),
                             result.getTotalTScore()
                     );
@@ -126,14 +141,17 @@ public class AdminController {
                 .orElseThrow(() -> new IllegalArgumentException("응답을 찾을 수 없습니다."));
 
         var session = result.getResponseSession();
+        String assessmentName = session.getAssessment() != null ? session.getAssessment().getName() : null;
 
         Map<String, Double> scaleRaw = readMap(result.getScaleRawScoresJson());
         Map<String, Double> scaleT = readMap(result.getScaleTScoresJson());
 
         AdminResponseDetail detail = new AdminResponseDetail(
                 session.getId(),
+                result.getId(),
                 session.getSubmittedAt(),
                 session.getGroupCode(),
+                assessmentName,
                 result.getTotalRawScore(),
                 result.getTotalTScore(),
                 scaleRaw,
@@ -177,6 +195,55 @@ public class AdminController {
 
         Map<String, Double> alphas = statisticsService.computeCronbachAlphaByScale();
         return ApiResponse.success(alphas);
+    }
+
+    @GetMapping("/reference")
+    public ApiResponse<List<AssessmentReferenceDto>> reference(
+            @RequestHeader("X-Admin-Token") String token
+    ) {
+        if (!authService.isValidToken(token)) {
+            throw new IllegalArgumentException("인증이 필요합니다.");
+        }
+        return ApiResponse.success(adminReferenceService.getReferenceData());
+    }
+
+    @PostMapping("/report/summary-pdf")
+    public ResponseEntity<byte[]> reportSummaryPdf(
+            @RequestHeader("X-Admin-Token") String token,
+            @RequestBody(required = false) AdminDashboardChartsPayload charts
+    ) {
+        if (!authService.isValidToken(token)) {
+            throw new IllegalArgumentException("인증이 필요합니다.");
+        }
+        try {
+            byte[] pdfBytes = adminReportPdfService.generateSummary(charts != null ? charts : new AdminDashboardChartsPayload());
+            String fileName = "admin-report-summary-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")) + ".pdf";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentLength(pdfBytes.length);
+            headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"");
+            return ResponseEntity.ok().headers(headers).body(pdfBytes);
+        } catch (Exception e) {
+            throw new IllegalStateException("PDF 생성 중 오류가 발생했습니다.", e);
+        }
+    }
+
+    @GetMapping("/report/reference-pdf")
+    public ResponseEntity<byte[]> reportReferencePdf(@RequestHeader("X-Admin-Token") String token) {
+        if (!authService.isValidToken(token)) {
+            throw new IllegalArgumentException("인증이 필요합니다.");
+        }
+        try {
+            byte[] pdfBytes = adminReportPdfService.generateReference();
+            String fileName = "admin-report-reference-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")) + ".pdf";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentLength(pdfBytes.length);
+            headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"");
+            return ResponseEntity.ok().headers(headers).body(pdfBytes);
+        } catch (Exception e) {
+            throw new IllegalStateException("PDF 생성 중 오류가 발생했습니다.", e);
+        }
     }
 }
 

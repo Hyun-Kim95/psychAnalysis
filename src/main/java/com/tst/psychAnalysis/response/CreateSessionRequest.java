@@ -1,5 +1,5 @@
 package com.tst.psychAnalysis.response;
 
-public record CreateSessionRequest(String groupCode) {
+public record CreateSessionRequest(Long assessmentId, String groupCode) {
 }
 

@@ -2,28 +2,40 @@ package com.tst.psychAnalysis.admin;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Service
 public class AccessLogService {
 
-    private final AccessLogRepository accessLogRepository;
+    private final AccessLogCountRepository accessLogCountRepository;
 
-    public AccessLogService(AccessLogRepository accessLogRepository) {
-        this.accessLogRepository = accessLogRepository;
+    public AccessLogService(AccessLogCountRepository accessLogCountRepository) {
+        this.accessLogCountRepository = accessLogCountRepository;
     }
 
+    @Transactional
     public void log(HttpServletRequest request, String eventType, UUID responseSessionId) {
-        AccessLog log = new AccessLog();
-        log.setOccurredAt(LocalDateTime.now());
-        log.setUrl(request.getRequestURI());
-        log.setUserAgent(request.getHeader("User-Agent"));
-        log.setClientIpMasked(maskIp(request.getRemoteAddr()));
-        log.setEventType(eventType);
-        log.setResponseSessionId(responseSessionId);
-        accessLogRepository.save(log);
+        String ip = maskIp(request.getRemoteAddr());
+        if (ip == null) return;
+        LocalDate today = LocalDate.now();
+        accessLogCountRepository.findByClientIpMaskedAndLogDateAndEventType(ip, today, eventType)
+                .ifPresentOrElse(
+                        row -> {
+                            row.setCount(row.getCount() + 1);
+                            accessLogCountRepository.save(row);
+                        },
+                        () -> {
+                            AccessLogCount row = new AccessLogCount();
+                            row.setClientIpMasked(ip);
+                            row.setLogDate(today);
+                            row.setEventType(eventType);
+                            row.setCount(1L);
+                            accessLogCountRepository.save(row);
+                        }
+                );
     }
 
     private String maskIp(String ip) {

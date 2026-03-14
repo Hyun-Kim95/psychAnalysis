@@ -7,5 +7,7 @@ import java.util.List;
 public interface ItemRepository extends JpaRepository<Item, Long> {
 
     List<Item> findByAssessmentIdOrderBySortOrderAsc(Long assessmentId);
+
+    long countByAssessmentId(Long assessmentId);
 }
 

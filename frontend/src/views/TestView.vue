@@ -2,7 +2,7 @@
   <section class="test" v-if="items.length">
     <div class="card">
       <header class="test-header">
-        <h2>문항에 응답해 주세요</h2>
+        <h2>{{ assessmentName || '문항에 응답해 주세요' }}</h2>
         <p class="test-sub">
           총 {{ items.length }}문항 중
           <strong>{{ currentIndex + 1 }}</strong>번 문항
@@ -35,7 +35,20 @@
       </div>
 
       <footer class="test-footer">
-        <button type="button" class="secondary-btn" :disabled="currentIndex === 0" @click="prevItem">
+        <button
+          v-if="currentIndex === 0"
+          type="button"
+          class="secondary-btn"
+          @click="goToIntro"
+        >
+          처음으로
+        </button>
+        <button
+          v-else
+          type="button"
+          class="secondary-btn"
+          @click="prevItem"
+        >
           이전
         </button>
 
@@ -69,7 +82,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { fetchCurrentAssessmentItems, submitAnswers, type AssessmentItem } from '../api'
+import { fetchAssessment, fetchAssessmentItems, submitAnswers, type AssessmentItem } from '../api'
 
 const props = defineProps<{
   assessmentId: number | null
@@ -78,9 +91,11 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'completed', payload: { resultId: string }): void
+  (e: 'cancel'): void
 }>()
 
 const items = ref<AssessmentItem[]>([])
+const assessmentName = ref<string>('')
 const currentIndex = ref(0)
 const answers = ref<Record<number, number>>({})
 const submitting = ref(false)
@@ -94,18 +109,27 @@ const progressPercent = computed(() => {
 })
 
 onMounted(async () => {
-  const data = await fetchCurrentAssessmentItems()
-  items.value = data.items
+  if (!props.assessmentId) return
+  const [assessment, itemsData] = await Promise.all([
+    fetchAssessment(props.assessmentId),
+    fetchAssessmentItems(props.assessmentId),
+  ])
+  assessmentName.value = assessment.name
+  items.value = itemsData.items
 })
 
 function selectChoice(itemId: number, value: number) {
   answers.value[itemId] = value
   showValidationError.value = false
+  // 보기 선택 시 자동으로 다음 문항으로 이동 (마지막 문항이면 그대로, 이전/다음 버튼으로 수정 가능)
+  if (!isLast.value) {
+    currentIndex.value += 1
+  }
 }
 
 function ensureAnswered(): boolean {
   const itemId = currentItem.value.id
-  if (!answers.value[itemId]) {
+  if (!(itemId in answers.value)) {
     showValidationError.value = true
     return false
   }
@@ -124,6 +148,10 @@ function prevItem() {
     currentIndex.value -= 1
     showValidationError.value = false
   }
+}
+
+function goToIntro() {
+  emit('cancel')
 }
 
 async function submit() {

@@ -215,6 +215,11 @@ code {
   gap: 8px;
 }
 
+.app-nav a.nav-btn {
+  text-decoration: none;
+  color: inherit;
+}
+
 .nav-btn {
   border-radius: 999px;
   border: 1px solid #e5e7eb;
@@ -232,6 +237,104 @@ code {
 
 .app-main {
   margin-top: 8px;
+}
+
+.assessment-cards {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.assessment-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 16px 18px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.assessment-card:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.assessment-card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 6px 0;
+}
+
+.assessment-card-desc {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.45;
+  margin: 0 0 8px 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.assessment-card-action {
+  font-size: 13px;
+  color: #2563eb;
+  font-weight: 500;
+}
+
+.assessment-card--group {
+  cursor: default;
+}
+
+.assessment-card--group:hover {
+  background: #fff;
+  border-color: #e5e7eb;
+}
+
+.assessment-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.version-btn {
+  padding: 8px 14px;
+  font-size: 14px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #f8fafc;
+  color: #334155;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.version-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.version-btn--short {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.version-btn--short:hover {
+  background: #dbeafe;
+}
+
+.version-btn--detail {
+  border-color: #059669;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.version-btn--detail:hover {
+  background: #d1fae5;
 }
 
 .card {
@@ -269,6 +372,19 @@ code {
 .secondary-btn {
   background: #e5e7eb;
   color: #111827;
+}
+
+.intro-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+}
+
+.intro-preparing {
+  color: #64748b;
+  font-size: 14px;
+  margin: 8px 0 0;
 }
 
 .intro-title {
@@ -423,9 +539,77 @@ code {
   background: #f3f4f6;
 }
 
+.t-score-explanation {
+  margin: 16px 0 20px;
+  padding: 14px 16px;
+  background: #f1f5f9;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.t-score-explanation-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+  margin: 0 0 8px 0;
+}
+
+.t-score-explanation p {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #475569;
+  margin: 0 0 6px 0;
+}
+
+.t-score-explanation p:last-child {
+  margin-bottom: 0;
+}
+
 .result-note {
   font-size: 12px;
   color: #6b7280;
+}
+
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.interpretations {
+  margin-top: 8px;
+  margin-bottom: 20px;
+}
+
+.interpretation-block {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border-left: 3px solid #64748b;
+}
+
+.interpretation-scale {
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+  margin: 0 0 6px 0;
+}
+
+.interpretation-text {
+  font-size: 14px;
+  line-height: 1.55;
+  color: #475569;
+  margin: 0;
+}
+
+.interpretation-generic {
+  font-size: 14px;
+  line-height: 1.55;
+  color: #64748b;
+  margin: 0;
+  padding: 12px 0;
 }
 
 #center {

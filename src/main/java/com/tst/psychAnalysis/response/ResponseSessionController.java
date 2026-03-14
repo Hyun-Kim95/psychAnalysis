@@ -44,8 +44,14 @@ public class ResponseSessionController {
     @PostMapping
     public ApiResponse<CreateSessionResponse> createSession(@RequestBody CreateSessionRequest request,
                                                             HttpServletRequest httpRequest) {
-        Assessment assessment = assessmentRepository.findFirstByIsActiveTrue()
-                .orElseThrow(() -> new IllegalStateException("활성화된 검사가 없습니다."));
+        Assessment assessment = request.assessmentId() != null
+                ? assessmentRepository.findById(request.assessmentId())
+                        .orElseThrow(() -> new IllegalArgumentException("검사를 찾을 수 없습니다."))
+                : assessmentRepository.findFirstByIsActiveTrue()
+                        .orElseThrow(() -> new IllegalStateException("활성화된 검사가 없습니다."));
+        if (!assessment.isActive()) {
+            throw new IllegalArgumentException("비활성화된 검사입니다.");
+        }
 
         ResponseSession session = new ResponseSession();
         session.setId(UUID.randomUUID());
@@ -56,7 +62,7 @@ public class ResponseSessionController {
 
         ResponseSession saved = responseSessionRepository.save(session);
 
-        accessLogService.log(httpRequest, "SESSION_CREATED", saved.getId());
+        accessLogService.log(httpRequest, "검사 시작", saved.getId());
 
         return ApiResponse.success(new CreateSessionResponse(saved.getId()));
     }
@@ -94,7 +100,7 @@ public class ResponseSessionController {
         Result scoredResult = scoringService.score(session);
         Result savedResult = resultRepository.save(scoredResult);
 
-        accessLogService.log(httpRequest, "SESSION_COMPLETED", session.getId());
+        accessLogService.log(httpRequest, "검사 제출", session.getId());
 
         return ApiResponse.success(new SubmitResponse(savedResult.getId()));
     }

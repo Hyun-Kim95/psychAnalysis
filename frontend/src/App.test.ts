@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
-import { describe, it, expect, vi, beforeAll } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import App from './App.vue'
+import { router } from './router'
 
 vi.mock('axios', () => {
   return {
@@ -21,8 +22,12 @@ vi.mock('axios', () => {
 
 describe('App', () => {
   it('renders main title', () => {
-    const wrapper = mount(App)
-    expect(wrapper.text()).toContain('심리검사 프로토타입')
+    const wrapper = mount(App, {
+      global: {
+        plugins: [router],
+      },
+    })
+    expect(wrapper.text()).toContain('심리 검사')
   })
 })
 
