@@ -248,7 +248,7 @@
         </button>
       </div>
 
-      <div v-if="selectedDetail" style="margin-top: 16px;">
+      <div v-if="selectedDetail" class="admin-detail-wrapper">
         <div class="result-detail-header">
           <h3 class="result-subtitle">선택한 응답 상세</h3>
           <button
@@ -261,7 +261,7 @@
             {{ resultPdfDownloading ? '다운로드 중…' : 'PDF 다운로드' }}
           </button>
         </div>
-        <div class="result-summary">
+        <div class="result-summary detail-result-summary">
           <div class="summary-item">
             <span class="summary-label">검사</span>
             <span class="summary-value">{{ selectedDetail.assessmentName ?? '-' }}</span>
@@ -659,6 +659,15 @@ async function downloadResultPdf() {
   .charts-grid {
     grid-template-columns: 1fr;
   }
+  .admin-detail-wrapper {
+    overflow-x: auto;
+  }
+  .detail-result-summary {
+    flex-direction: column;
+  }
+  .detail-result-summary .summary-item {
+    width: 100%;
+  }
 }
 .chart-wrap {
   background: var(--card-bg, #fff);
@@ -706,6 +715,9 @@ async function downloadResultPdf() {
 }
 .reference-list {
   margin-top: 8px;
+}
+.admin-detail-wrapper {
+  margin-top: 16px;
 }
 .result-detail-header {
   display: flex;
