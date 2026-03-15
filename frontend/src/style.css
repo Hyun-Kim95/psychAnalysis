@@ -539,6 +539,27 @@ code {
   background: #f3f4f6;
 }
 
+.scale-table tr.scale-group-header td {
+  background: #eef2ff;
+  font-weight: 600;
+  color: #3730a3;
+  text-align: left;
+  padding: 8px 10px;
+}
+
+.interpretation-group-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #3730a3;
+  margin: 20px 0 10px 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #c7d2fe;
+}
+
+.interpretation-group-title:first-child {
+  margin-top: 0;
+}
+
 .t-score-explanation {
   margin: 16px 0 20px;
   padding: 14px 16px;

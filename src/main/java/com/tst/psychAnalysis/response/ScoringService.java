@@ -85,6 +85,7 @@ public class ScoringService {
         Norm totalNorm = normByScale.get("TOTAL");
         if (totalNorm != null) {
             totalT = 50.0 + 10.0 * (totalRaw - totalNorm.getMean()) / totalNorm.getSd();
+            scaleTScores.put("TOTAL", totalT);
         }
 
         Result result = new Result();

@@ -76,6 +76,12 @@ export async function submitAnswers(sessionId: string, answers: { itemId: number
 /** TCI 엑셀 기준 척도 표시 순서 */
 export const TCI_SCALE_ORDER = ['NS', 'HA', 'RD', 'P', 'SD', 'C', 'ST'] as const
 
+/** NEO 등: 주척도별 그룹 (예: N (신경증) → [N1, N2, ...]) */
+export interface ScaleGroupDto {
+  groupLabel: string
+  scaleCodes: string[]
+}
+
 export interface ResultViewData {
   /** 실시한 검사명 */
   assessmentName?: string
@@ -89,6 +95,8 @@ export interface ResultViewData {
   scaleDisplayNames?: Record<string, string>
   /** 척도 코드 → 점수 기반 해석 문장 (TCI만) */
   scaleInterpretations?: Record<string, string>
+  /** NEO 등: 주척도별 그룹. 있으면 척도별 점수/해석을 그룹 헤더와 함께 표시 */
+  scaleGroups?: ScaleGroupDto[]
 }
 
 export async function fetchResult(resultId: string) {
@@ -187,6 +195,12 @@ export interface AdminResponseDetail {
   totalTScore: number | null
   scaleRawScores: Record<string, number>
   scaleTScores: Record<string, number>
+  /** 척도 표시 순서 (결과 화면과 동일) */
+  scaleOrder?: string[]
+  /** 척도 코드 → 한글명 */
+  scaleDisplayNames?: Record<string, string>
+  /** NEO 등 주척도별 그룹 */
+  scaleGroups?: ScaleGroupDto[]
 }
 
 export async function fetchAdminResponses(token: string) {
@@ -215,6 +229,8 @@ export interface AssessmentReference {
   assessmentName: string
   norms: NormRow[]
   interpretationGuide: string
+  /** NEO 등 주척도별 그룹(기준점수 표시 N·E·O·A·C + N1~C6 순서) */
+  scaleGroups?: ScaleGroupDto[]
 }
 
 export async function fetchAdminReference(token: string) {
@@ -255,6 +271,26 @@ export async function downloadAdminReferencePdf(token: string): Promise<void> {
   const a = document.createElement('a')
   a.href = url
   a.download = `관리자리포트-기준해석-${new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-')}.pdf`
+  a.click()
+  window.URL.revokeObjectURL(url)
+}
+
+/** 관리자 - 선택한 응답의 결과 PDF (검사 완료 후 다운로드 화면과 동일) */
+export async function downloadAdminResultPdf(token: string, resultId: string): Promise<void> {
+  const res = await axios.get<Blob>(`/api/admin/results/${resultId}/pdf`, {
+    headers: { 'X-Admin-Token': token },
+    responseType: 'blob',
+  })
+  const disposition = res.headers['content-disposition']
+  let filename = `검사결과-${resultId}.pdf`
+  if (typeof disposition === 'string') {
+    const match = disposition.match(/filename="?([^";\n]+)"?/)
+    if (match) filename = match[1].trim()
+  }
+  const url = window.URL.createObjectURL(res.data)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
   a.click()
   window.URL.revokeObjectURL(url)
 }

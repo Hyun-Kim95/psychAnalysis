@@ -13,7 +13,7 @@
       </header>
 
       <div class="test-body">
-        <p class="item-number">문항 {{ currentItem.itemNumber }}</p>
+        <p class="item-number">문항 {{ currentIndex + 1 }}</p>
         <p class="item-text">{{ currentItem.text }}</p>
 
         <div class="choices">

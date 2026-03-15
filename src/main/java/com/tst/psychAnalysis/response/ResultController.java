@@ -1,5 +1,6 @@
 package com.tst.psychAnalysis.response;
 
+import com.tst.psychAnalysis.assessment.NeoScaleInterpretation;
 import com.tst.psychAnalysis.assessment.Scale;
 import com.tst.psychAnalysis.assessment.ScaleRepository;
 import com.tst.psychAnalysis.assessment.ScaleInterpretationFacade;
@@ -17,6 +18,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -59,6 +62,8 @@ public class ResultController {
         Map<String, String> interpretations = ScaleInterpretationFacade.interpret(
                 assessmentName, result.getTotalRawScore(), scaleRawScores, scaleTScores);
 
+        List<ScaleGroupDto> scaleGroups = buildScaleGroupsIfNeo(assessmentName, scaleOrder);
+
         ResultResponse body = new ResultResponse(
                 assessmentName,
                 result.getTotalRawScore(),
@@ -67,10 +72,37 @@ public class ResultController {
                 scaleTScores,
                 scaleOrder,
                 scaleDisplayNames,
-                interpretations
+                interpretations,
+                scaleGroups
         );
 
         return ApiResponse.success(body);
+    }
+
+    /** NEO 검사이고 하위척도(N1, E1 등)가 있으면 주척도별 그룹 목록 반환 */
+    private List<ScaleGroupDto> buildScaleGroupsIfNeo(String assessmentName, List<String> scaleOrder) {
+        if (assessmentName == null || !assessmentName.contains("NEO") || scaleOrder == null || scaleOrder.isEmpty()) {
+            return List.of();
+        }
+        boolean hasFacets = scaleOrder.stream().anyMatch(NeoScaleInterpretation.FACET_ORDER::contains);
+        if (!hasFacets) return List.of();
+
+        Map<String, List<String>> byFactor = new LinkedHashMap<>();
+        for (String code : scaleOrder) {
+            if (code == null || code.length() < 2) continue;
+            String factor = code.substring(0, 1);
+            if (NeoScaleInterpretation.MAIN_FACTOR_NAMES.containsKey(factor)) {
+                byFactor.computeIfAbsent(factor, k -> new ArrayList<>()).add(code);
+            }
+        }
+        List<ScaleGroupDto> groups = new ArrayList<>();
+        for (String f : List.of("N", "E", "O", "A", "C")) {
+            if (byFactor.containsKey(f)) {
+                String label = NeoScaleInterpretation.MAIN_FACTOR_NAMES.get(f);
+                groups.add(new ScaleGroupDto(f + " (" + label + ")", byFactor.get(f)));
+            }
+        }
+        return groups;
     }
 
     @GetMapping("/{id}/pdf")

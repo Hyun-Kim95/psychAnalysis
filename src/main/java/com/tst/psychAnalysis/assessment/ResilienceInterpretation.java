@@ -16,12 +16,13 @@ public final class ResilienceInterpretation {
     private static final String HIGH = "회복탄력성이 높은 편으로 해석됩니다. 스트레스나 역경을 겪어도 비교적 잘 적응하고, 경험에서 의미를 찾으며 회복하는 경향이 있습니다. 이러한 강점을 일상에서 활용해 보시기 바랍니다.";
 
     /**
-     * 척도 "R"의 T점수에 따른 해석을 반환합니다.
+     * 총점(TOTAL) 또는 단일척도 "R"의 T점수에 따른 해석을 반환합니다. KRQ-53은 TOTAL 사용.
      */
     public static Map<String, String> interpret(Map<String, Double> scaleTScores) {
-        Double t = scaleTScores != null ? scaleTScores.get("R") : null;
+        Double t = scaleTScores != null ? (scaleTScores.get("TOTAL") != null ? scaleTScores.get("TOTAL") : scaleTScores.get("R")) : null;
         String text = interpretOne(t);
-        return text.isEmpty() ? Map.of() : Map.of("R", text);
+        if (text.isEmpty()) return Map.of();
+        return scaleTScores != null && scaleTScores.containsKey("TOTAL") ? Map.of("TOTAL", text) : Map.of("R", text);
     }
 
     public static String interpretOne(Double tScore) {

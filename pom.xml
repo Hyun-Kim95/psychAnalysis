@@ -12,7 +12,7 @@
 	<artifactId>psychAnalysis</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>psychAnalysis</name>
-	<description>Analysis of Psychological Test Prototypes project for Spring Boot</description>
+	<description>Psychological test analysis service for Spring Boot</description>
 	<url/>
 	<licenses>
 		<license/>

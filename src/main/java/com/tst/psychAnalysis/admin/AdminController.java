@@ -2,9 +2,15 @@ package com.tst.psychAnalysis.admin;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tst.psychAnalysis.assessment.NeoScaleInterpretation;
+import com.tst.psychAnalysis.assessment.Scale;
+import com.tst.psychAnalysis.assessment.ScaleRepository;
 import com.tst.psychAnalysis.common.ApiResponse;
 import com.tst.psychAnalysis.response.ResponseSessionRepository;
+import com.tst.psychAnalysis.response.Result;
+import com.tst.psychAnalysis.response.ResultPdfService;
 import com.tst.psychAnalysis.response.ResultRepository;
+import com.tst.psychAnalysis.response.ScaleGroupDto;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -15,9 +21,12 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -31,6 +40,8 @@ public class AdminController {
     private final StatisticsService statisticsService;
     private final AdminReferenceService adminReferenceService;
     private final AdminReportPdfService adminReportPdfService;
+    private final ScaleRepository scaleRepository;
+    private final ResultPdfService resultPdfService;
 
     public AdminController(AdminAuthService authService,
                            ResponseSessionRepository responseSessionRepository,
@@ -39,7 +50,9 @@ public class AdminController {
                            ObjectMapper objectMapper,
                            StatisticsService statisticsService,
                            AdminReferenceService adminReferenceService,
-                           AdminReportPdfService adminReportPdfService) {
+                           AdminReportPdfService adminReportPdfService,
+                           ScaleRepository scaleRepository,
+                           ResultPdfService resultPdfService) {
         this.authService = authService;
         this.responseSessionRepository = responseSessionRepository;
         this.resultRepository = resultRepository;
@@ -48,6 +61,8 @@ public class AdminController {
         this.statisticsService = statisticsService;
         this.adminReferenceService = adminReferenceService;
         this.adminReportPdfService = adminReportPdfService;
+        this.scaleRepository = scaleRepository;
+        this.resultPdfService = resultPdfService;
     }
 
     @PostMapping("/login")
@@ -108,7 +123,7 @@ public class AdminController {
             throw new IllegalArgumentException("인증이 필요합니다.");
         }
 
-        List<AdminResponseSummary> summaries = resultRepository.findAll().stream()
+        List<AdminResponseSummary> summaries = resultRepository.findAllByOrderByResponseSession_SubmittedAtDesc().stream()
                 .map(result -> {
                     var session = result.getResponseSession();
                     String assessmentName = session.getAssessment() != null ? session.getAssessment().getName() : null;
@@ -146,6 +161,20 @@ public class AdminController {
         Map<String, Double> scaleRaw = readMap(result.getScaleRawScoresJson());
         Map<String, Double> scaleT = readMap(result.getScaleTScoresJson());
 
+        List<String> scaleOrder = List.of();
+        Map<String, String> scaleDisplayNames = Map.of();
+        List<ScaleGroupDto> scaleGroups = List.of();
+        var assessment = session.getAssessment();
+        if (assessment != null) {
+            List<Scale> scales = scaleRepository.findByAssessmentIdOrderByIdAsc(assessment.getId());
+            if (!scales.isEmpty()) {
+                scaleOrder = scales.stream().map(Scale::getCode).toList();
+                scaleDisplayNames = scales.stream()
+                        .collect(Collectors.toMap(Scale::getCode, s -> s.getName() != null ? s.getName() : s.getCode()));
+                scaleGroups = buildScaleGroupsIfNeo(assessmentName, scaleOrder);
+            }
+        }
+
         AdminResponseDetail detail = new AdminResponseDetail(
                 session.getId(),
                 result.getId(),
@@ -155,10 +184,65 @@ public class AdminController {
                 result.getTotalRawScore(),
                 result.getTotalTScore(),
                 scaleRaw,
-                scaleT
+                scaleT,
+                scaleOrder,
+                scaleDisplayNames,
+                scaleGroups
         );
 
         return ApiResponse.success(detail);
+    }
+
+    /** 선택한 응답의 결과 PDF (검사 완료 후 다운로드하는 PDF와 동일한 배치) */
+    @GetMapping("/results/{resultId}/pdf")
+    public ResponseEntity<byte[]> getResponseResultPdf(
+            @RequestHeader("X-Admin-Token") String token,
+            @PathVariable("resultId") UUID resultId
+    ) {
+        if (!authService.isValidToken(token)) {
+            throw new IllegalArgumentException("인증이 필요합니다.");
+        }
+        Result result = resultRepository.findById(resultId)
+                .orElseThrow(() -> new IllegalArgumentException("결과를 찾을 수 없습니다."));
+        byte[] pdfBytes = resultPdfService.generate(result);
+        String assessmentName = result.getResponseSession().getAssessment() != null
+                ? result.getResponseSession().getAssessment().getName()
+                : "검사";
+        LocalDateTime at = result.getCreatedAt() != null ? result.getCreatedAt() : LocalDateTime.now();
+        String dateTime = at.format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
+        String base = (assessmentName != null ? assessmentName.replace(" ", "") : "검사") + "결과";
+        String fileName = base + "-" + dateTime + ".pdf";
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentLength(pdfBytes.length);
+        headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"");
+        return ResponseEntity.ok().headers(headers).body(pdfBytes);
+    }
+
+    /** NEO 검사이고 하위척도(N1, E1 등)가 있으면 주척도별 그룹 목록 반환 (검사결과 화면과 동일) */
+    private List<ScaleGroupDto> buildScaleGroupsIfNeo(String assessmentName, List<String> scaleOrder) {
+        if (assessmentName == null || !assessmentName.contains("NEO") || scaleOrder == null || scaleOrder.isEmpty()) {
+            return List.of();
+        }
+        boolean hasFacets = scaleOrder.stream().anyMatch(NeoScaleInterpretation.FACET_ORDER::contains);
+        if (!hasFacets) return List.of();
+
+        Map<String, List<String>> byFactor = new LinkedHashMap<>();
+        for (String code : scaleOrder) {
+            if (code == null || code.length() < 2) continue;
+            String factor = code.substring(0, 1);
+            if (NeoScaleInterpretation.MAIN_FACTOR_NAMES.containsKey(factor)) {
+                byFactor.computeIfAbsent(factor, k -> new ArrayList<>()).add(code);
+            }
+        }
+        List<ScaleGroupDto> groups = new ArrayList<>();
+        for (String f : List.of("N", "E", "O", "A", "C")) {
+            if (byFactor.containsKey(f)) {
+                String label = NeoScaleInterpretation.MAIN_FACTOR_NAMES.get(f);
+                groups.add(new ScaleGroupDto(f + " (" + label + ")", byFactor.get(f)));
+            }
+        }
+        return groups;
     }
 
     private Map<String, Double> readMap(String json) {

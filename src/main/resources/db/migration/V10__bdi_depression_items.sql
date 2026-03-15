@@ -30,7 +30,7 @@ CROSS JOIN (VALUES
   (1, '전혀 없음', 0),
   (2, '가끔', 1),
   (3, '자주', 2),
-  (4, '거의 매일', 3)
+  (4, '거의 항상', 3)
 ) AS c(ord, label, value)
 WHERE a.name = 'BDI 우울검사';
 

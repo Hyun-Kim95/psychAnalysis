@@ -134,7 +134,7 @@ SELECT (SELECT id FROM assessment WHERE name = 'BDI 우울검사 (상세)' LIMIT
 ) AS v(rn, txt);
 INSERT INTO choice (item_id, label, value, sort_order)
 SELECT i.id, c.label, c.value, c.ord FROM item i JOIN assessment a ON a.id = i.assessment_id
-CROSS JOIN (VALUES (1,'전혀 없음',0),(2,'가끔',1),(3,'자주',2),(4,'거의 매일',3)) AS c(ord, label, value) WHERE a.name = 'BDI 우울검사 (상세)';
+CROSS JOIN (VALUES (1,'전혀 없음',0),(2,'가끔',1),(3,'자주',2),(4,'거의 항상',3)) AS c(ord, label, value) WHERE a.name = 'BDI 우울검사 (상세)';
 INSERT INTO norm (assessment_id, scale_id, group_code, mean, sd) SELECT a.id, s.id, 'default', 18.0, 12.0 FROM assessment a JOIN scale s ON s.assessment_id = a.id WHERE a.name = 'BDI 우울검사 (상세)';
 INSERT INTO norm (assessment_id, scale_id, group_code, mean, sd) SELECT id, NULL, 'default', 18.0, 12.0 FROM assessment WHERE name = 'BDI 우울검사 (상세)' LIMIT 1;
 
@@ -149,7 +149,7 @@ SELECT (SELECT id FROM assessment WHERE name = 'BAI 불안검사 (상세)' LIMIT
 ) AS v(rn, txt);
 INSERT INTO choice (item_id, label, value, sort_order)
 SELECT i.id, c.label, c.value, c.ord FROM item i JOIN assessment a ON a.id = i.assessment_id
-CROSS JOIN (VALUES (1,'전혀 없음',0),(2,'가끔',1),(3,'자주',2),(4,'거의 매일',3)) AS c(ord, label, value) WHERE a.name = 'BAI 불안검사 (상세)';
+CROSS JOIN (VALUES (1,'전혀 없음',0),(2,'가끔',1),(3,'자주',2),(4,'거의 항상',3)) AS c(ord, label, value) WHERE a.name = 'BAI 불안검사 (상세)';
 INSERT INTO norm (assessment_id, scale_id, group_code, mean, sd) SELECT a.id, s.id, 'default', 18.0, 12.0 FROM assessment a JOIN scale s ON s.assessment_id = a.id WHERE a.name = 'BAI 불안검사 (상세)';
 INSERT INTO norm (assessment_id, scale_id, group_code, mean, sd) SELECT id, NULL, 'default', 18.0, 12.0 FROM assessment WHERE name = 'BAI 불안검사 (상세)' LIMIT 1;
 

@@ -42,25 +42,55 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="code in scaleOrder" :key="code" v-show="hasScaleData(code)">
-            <td>{{ scaleLabel(code) }}</td>
-            <td>{{ (data.scaleRawScores[code] ?? 0).toFixed(1) }}</td>
-            <td>{{ (data.scaleTScores[code] ?? 0).toFixed(1) }}</td>
-          </tr>
+          <template v-if="scaleGroups.length">
+            <template v-for="group in scaleGroups" :key="group.groupLabel">
+              <tr class="scale-group-header">
+                <td colspan="3">{{ group.groupLabel }}</td>
+              </tr>
+              <tr v-for="code in group.scaleCodes" :key="code" v-show="hasScaleData(code)">
+                <td>{{ scaleLabel(code) }}</td>
+                <td>{{ (data.scaleRawScores[code] ?? 0).toFixed(1) }}</td>
+                <td>{{ (data.scaleTScores[code] ?? 0).toFixed(1) }}</td>
+              </tr>
+            </template>
+          </template>
+          <template v-else>
+            <tr v-for="code in scaleOrder" :key="code" v-show="hasScaleData(code)">
+              <td>{{ scaleLabel(code) }}</td>
+              <td>{{ (data.scaleRawScores[code] ?? 0).toFixed(1) }}</td>
+              <td>{{ (data.scaleTScores[code] ?? 0).toFixed(1) }}</td>
+            </tr>
+          </template>
         </tbody>
       </table>
 
       <h3 class="result-subtitle">척도별 해석</h3>
       <div class="interpretations">
-        <div
-          v-for="code in scaleOrder"
-          :key="'interp-' + code"
-          v-show="data.scaleInterpretations?.[code]"
-          class="interpretation-block"
-        >
-          <h4 class="interpretation-scale">{{ scaleLabel(code) }} · T {{ (data.scaleTScores[code] ?? 0).toFixed(1) }}</h4>
-          <p class="interpretation-text">{{ data.scaleInterpretations[code] }}</p>
-        </div>
+        <template v-if="scaleGroups.length">
+          <template v-for="group in scaleGroups" :key="'g-' + group.groupLabel">
+            <h4 class="interpretation-group-title">{{ group.groupLabel }}</h4>
+            <div
+              v-for="code in group.scaleCodes"
+              :key="'interp-' + code"
+              v-show="data.scaleInterpretations?.[code]"
+              class="interpretation-block"
+            >
+              <h4 class="interpretation-scale">{{ scaleLabel(code) }} · T {{ (data.scaleTScores[code] ?? 0).toFixed(1) }}</h4>
+              <p class="interpretation-text">{{ data.scaleInterpretations[code] }}</p>
+            </div>
+          </template>
+        </template>
+        <template v-else>
+          <div
+            v-for="code in scaleOrder"
+            :key="'interp-' + code"
+            v-show="data.scaleInterpretations?.[code]"
+            class="interpretation-block"
+          >
+            <h4 class="interpretation-scale">{{ scaleLabel(code) }} · T {{ (data.scaleTScores[code] ?? 0).toFixed(1) }}</h4>
+            <p class="interpretation-text">{{ data.scaleInterpretations[code] }}</p>
+          </div>
+        </template>
         <p v-if="hasAnyInterpretation === false" class="interpretation-generic">
           위 척도별 점수와 T점수를 참고해 주세요. 심리상담·임상적 판단이 필요할 경우 전문가와 상담하시기 바랍니다.
         </p>
@@ -103,6 +133,7 @@ const error = ref<string | null>(null)
 const data = ref<ResultViewData | null>(null)
 
 const scaleOrder = computed(() => data.value?.scaleOrder?.length ? data.value.scaleOrder! : [...TCI_SCALE_ORDER])
+const scaleGroups = computed(() => data.value?.scaleGroups?.length ? data.value.scaleGroups : [])
 const hasAnyInterpretation = computed(() => {
   const interp = data.value?.scaleInterpretations
   if (!interp) return false

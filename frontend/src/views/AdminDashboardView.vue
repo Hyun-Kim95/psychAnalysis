@@ -90,6 +90,7 @@
         <h4 class="ref-subtitle">T점수란?</h4>
         <p>T점수는 원점수를 표준화한 점수로, <strong>평균 50, 표준편차 10</strong>을 기준으로 합니다. 규준(참조 집단)과 비교한 상대적 위치를 나타냅니다.</p>
         <p>원점수가 규준 평균과 같을 때 T점수는 <strong>50</strong>이며, 60 이상이면 상대적으로 높은 편, 40 미만이면 낮은 편으로 해석합니다. 척도별 원점수는 이 규준(평균·표준편차)을 기준으로 T점수로 변환해 해석할 수 있습니다.</p>
+        <p class="ref-simple-notice">아래 기준점수 및 해석은 <strong>간단 검사</strong> 기준입니다. (상세 검사도 T점수·해석 기준은 동일합니다.)</p>
       </div>
       <div v-if="referenceLoading" class="ref-loading">기준점수·해석 정보를 불러오는 중...</div>
       <div v-else class="reference-list">
@@ -117,11 +118,30 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in ref.norms" :key="row.scaleCode">
-                  <td>{{ row.scaleName || row.scaleCode }}</td>
-                  <td>{{ row.mean != null ? row.mean.toFixed(2) : '-' }}</td>
-                  <td>{{ row.sd != null ? row.sd.toFixed(2) : '-' }}</td>
-                </tr>
+                <template v-if="ref.scaleGroups?.length">
+                  <template v-for="group in ref.scaleGroups" :key="group.groupLabel">
+                    <tr class="scale-group-header">
+                      <td colspan="3">{{ group.groupLabel }}</td>
+                    </tr>
+                    <tr v-for="row in refNormsForGroup(ref, group)" :key="row.scaleCode">
+                      <td>{{ row.scaleName || row.scaleCode }}</td>
+                      <td>{{ row.mean != null ? row.mean.toFixed(2) : '-' }}</td>
+                      <td>{{ row.sd != null ? row.sd.toFixed(2) : '-' }}</td>
+                    </tr>
+                  </template>
+                  <tr v-if="refTotalNorm(ref)" :key="'total'">
+                    <td>{{ refTotalNorm(ref)!.scaleName || '총점' }}</td>
+                    <td>{{ refTotalNorm(ref)!.mean != null ? refTotalNorm(ref)!.mean!.toFixed(2) : '-' }}</td>
+                    <td>{{ refTotalNorm(ref)!.sd != null ? refTotalNorm(ref)!.sd!.toFixed(2) : '-' }}</td>
+                  </tr>
+                </template>
+                <template v-else>
+                  <tr v-for="row in ref.norms" :key="row.scaleCode">
+                    <td>{{ row.scaleName || row.scaleCode }}</td>
+                    <td>{{ row.mean != null ? row.mean.toFixed(2) : '-' }}</td>
+                    <td>{{ row.sd != null ? row.sd.toFixed(2) : '-' }}</td>
+                  </tr>
+                </template>
               </tbody>
             </table>
           </div>
@@ -229,7 +249,18 @@
       </div>
 
       <div v-if="selectedDetail" style="margin-top: 16px;">
-        <h3 class="result-subtitle">선택한 응답 상세</h3>
+        <div class="result-detail-header">
+          <h3 class="result-subtitle">선택한 응답 상세</h3>
+          <button
+            v-if="selectedDetail.resultId"
+            type="button"
+            class="primary-btn"
+            :disabled="resultPdfDownloading"
+            @click="downloadResultPdf"
+          >
+            {{ resultPdfDownloading ? '다운로드 중…' : 'PDF 다운로드' }}
+          </button>
+        </div>
         <div class="result-summary">
           <div class="summary-item">
             <span class="summary-label">검사</span>
@@ -245,21 +276,42 @@
           </div>
         </div>
 
-        <h4 class="result-subtitle" style="margin-top: 12px;">척도별 점수</h4>
+        <h3 class="result-subtitle">척도별 점수 (엑셀 규준 기준)</h3>
         <table class="scale-table">
           <thead>
             <tr>
               <th>척도</th>
-              <th>Raw</th>
-              <th>T</th>
+              <th>원점수</th>
+              <th>T 점수</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(raw, code) in selectedDetail.scaleRawScores" :key="code">
-              <td>{{ code }}</td>
-              <td>{{ raw.toFixed(1) }}</td>
-              <td>{{ (selectedDetail.scaleTScores[code] ?? 0).toFixed(1) }}</td>
-            </tr>
+            <template v-if="adminScaleGroups.length">
+              <template v-for="group in adminScaleGroups" :key="group.groupLabel">
+                <tr class="scale-group-header">
+                  <td colspan="3">{{ group.groupLabel }}</td>
+                </tr>
+                <tr v-for="code in group.scaleCodes" :key="code">
+                  <td>{{ adminScaleLabel(code) }}</td>
+                  <td>{{ (selectedDetail.scaleRawScores[code] ?? 0).toFixed(1) }}</td>
+                  <td>{{ (selectedDetail.scaleTScores[code] ?? 0).toFixed(1) }}</td>
+                </tr>
+              </template>
+            </template>
+            <template v-else-if="adminScaleOrder.length">
+              <tr v-for="code in adminScaleOrder" :key="code">
+                <td>{{ adminScaleLabel(code) }}</td>
+                <td>{{ (selectedDetail.scaleRawScores[code] ?? 0).toFixed(1) }}</td>
+                <td>{{ (selectedDetail.scaleTScores[code] ?? 0).toFixed(1) }}</td>
+              </tr>
+            </template>
+            <template v-else>
+              <tr v-for="(raw, code) in selectedDetail.scaleRawScores" :key="code">
+                <td>{{ code }}</td>
+                <td>{{ raw.toFixed(1) }}</td>
+                <td>{{ (selectedDetail.scaleTScores[code] ?? 0).toFixed(1) }}</td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -279,11 +331,13 @@ import {
   fetchAdminReference,
   downloadAdminSummaryPdf,
   downloadAdminReferencePdf,
+  downloadAdminResultPdf,
   type AccessLogCount,
   type AdminDashboardData,
   type AdminResponseSummary,
   type AdminResponseDetail,
   type AssessmentReference,
+  type NormRow,
   type AdminDashboardChartsPayload,
 } from '../api'
 
@@ -302,6 +356,7 @@ const referenceList = ref<AssessmentReference[]>([])
 const referenceLoading = ref(false)
 const summaryDownloading = ref(false)
 const referenceDownloading = ref(false)
+const resultPdfDownloading = ref(false)
 
 const pageSize = 10
 const logsPage = ref(1)
@@ -323,6 +378,28 @@ const pagedResponses = computed(() => {
   const start = (responsesPage.value - 1) * pageSize
   return responses.value.slice(start, start + pageSize)
 })
+
+const adminScaleOrder = computed(() =>
+  selectedDetail.value?.scaleOrder?.length ? selectedDetail.value.scaleOrder! : [],
+)
+const adminScaleGroups = computed(() =>
+  selectedDetail.value?.scaleGroups?.length ? selectedDetail.value.scaleGroups! : [],
+)
+function adminScaleLabel(code: string) {
+  const d = selectedDetail.value
+  if (!d) return code
+  const name = d.scaleDisplayNames?.[code]
+  return name ? `${name} (${code})` : code
+}
+
+function refNormsForGroup(ref: AssessmentReference, group: { scaleCodes: string[] }): NormRow[] {
+  return group.scaleCodes
+    .map((code) => ref.norms.find((n) => n.scaleCode === code))
+    .filter((n): n is NormRow => n != null)
+}
+function refTotalNorm(ref: AssessmentReference): NormRow | null {
+  return ref.norms.find((n) => n.scaleCode === 'TOTAL') ?? null
+}
 
 const chartAssessmentRef = ref<HTMLCanvasElement | null>(null)
 const chartAvgScoreRef = ref<HTMLCanvasElement | null>(null)
@@ -557,6 +634,18 @@ async function downloadAdminReference() {
     referenceDownloading.value = false
   }
 }
+
+async function downloadResultPdf() {
+  if (!props.token || !selectedDetail.value?.resultId || resultPdfDownloading.value) return
+  resultPdfDownloading.value = true
+  try {
+    await downloadAdminResultPdf(props.token, selectedDetail.value.resultId)
+  } catch (e) {
+    // 실패 시 무시
+  } finally {
+    resultPdfDownloading.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -602,6 +691,15 @@ async function downloadAdminReference() {
 }
 .ref-t-score-explanation .ref-subtitle { margin-top: 0; }
 .ref-t-score-explanation p { margin: 8px 0 0 0; font-size: 0.9rem; line-height: 1.5; }
+.ref-simple-notice {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: var(--bg-notice, #eff6ff);
+  border-left: 3px solid var(--border-notice, #3b82f6);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #475569);
+}
 .ref-loading {
   color: var(--text-secondary, #475569);
   padding: 12px 0;
@@ -609,6 +707,15 @@ async function downloadAdminReference() {
 .reference-list {
   margin-top: 8px;
 }
+.result-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.result-detail-header .result-subtitle { margin: 0; }
 .reference-block {
   border: 1px solid var(--border-color, #e2e8f0);
   border-radius: 8px;
