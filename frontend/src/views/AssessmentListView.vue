@@ -54,8 +54,8 @@ const DISPLAY_DESCRIPTIONS: Record<string, string> = {
   'BDI 우울검사 (상세)': 'Beck Depression Inventory(벡 우울척도, 21문항)',
   '회복탄력성 검사': '한국인 회복탄력성 척도(KRQ)',
   '회복탄력성 검사 (상세)': '한국인 회복탄력성 척도(KRQ-53)',
-  'NEO 성격검사': 'NEO 성격검사 (대학·성인용)',
-  'NEO 성격검사 (상세)': 'NEO 성격검사 (대학·성인용, 58문항)',
+  'NEO 성격검사': 'NEO 성격검사 (성인용)',
+  'NEO 성격검사 (상세)': 'NEO 성격검사 (성인용, 58문항)',
 }
 
 const assessmentGroups = computed(() => {
