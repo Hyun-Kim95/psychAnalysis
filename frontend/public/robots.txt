@@ -1,6 +1,4 @@
 User-agent: *
 Allow: /
-
-# 사이트맵은 배포 도메인에 맞게 수정하세요.
-# 예시: Sitemap: https://psych-analysis.vercel.app/sitemap.xml
+Sitemap: https://psych-analysis-git-main-hyun-kim95s-projects.vercel.app/sitemap.xml
 
