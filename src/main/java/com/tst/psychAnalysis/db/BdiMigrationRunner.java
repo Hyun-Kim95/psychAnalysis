@@ -112,8 +112,16 @@ public class BdiMigrationRunner implements ApplicationRunner {
     }
 
     private void ensureScaleD(Long assessmentId) {
-        Integer exists = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM scale WHERE assessment_id = ? AND code = 'D'", Integer.class, assessmentId);
+        Integer exists = null;
+        try {
+            exists = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM scale WHERE assessment_id = ? AND code = 'D'",
+                Integer.class,
+                assessmentId
+            );
+        } catch (BadSqlGrammarException ex) {
+            // scale 테이블이 아직 없으면 아래 INSERT에서 함께 생성되므로 무시
+        }
         if (exists == null || exists == 0) {
             jdbcTemplate.update("INSERT INTO scale (assessment_id, code, name, description) VALUES (?, 'D', '우울', '우울 기분·동기 등')", assessmentId);
         }
@@ -128,7 +136,21 @@ public class BdiMigrationRunner implements ApplicationRunner {
     }
 
     private void insertBdiItemsAndChoices(Long assessmentId, int from, int to) {
-        Long scaleId = jdbcTemplate.queryForObject("SELECT id FROM scale WHERE assessment_id = ? AND code = 'D' LIMIT 1", Long.class, assessmentId);
+        Long scaleId;
+        try {
+            scaleId = jdbcTemplate.queryForObject(
+                "SELECT id FROM scale WHERE assessment_id = ? AND code = 'D' LIMIT 1",
+                Long.class,
+                assessmentId
+            );
+        } catch (BadSqlGrammarException ex) {
+            // scale 테이블이 아직 없거나 조회가 불가능한 초기 상태에서는 BDI 마이그레이션을 건너뜀
+            return;
+        }
+        if (scaleId == null) {
+            // 해당 assessment에 'D' 스케일이 아직 없으면 BDI 마이그레이션을 건너뜀
+            return;
+        }
         for (int n = from; n <= to; n++) {
             int idx = n - 1;
             String title = idx < BDI_21_TITLES.length ? BDI_21_TITLES[idx] : "문항 " + n;
@@ -147,7 +169,20 @@ public class BdiMigrationRunner implements ApplicationRunner {
     }
 
     private void insertBdiNorms(Long assessmentId, int itemCount) {
-        Long scaleId = jdbcTemplate.queryForObject("SELECT id FROM scale WHERE assessment_id = ? AND code = 'D' LIMIT 1", Long.class, assessmentId);
+        Long scaleId;
+        try {
+            scaleId = jdbcTemplate.queryForObject(
+                "SELECT id FROM scale WHERE assessment_id = ? AND code = 'D' LIMIT 1",
+                Long.class,
+                assessmentId
+            );
+        } catch (BadSqlGrammarException ex) {
+            // scale 테이블이 아직 없거나 조회가 불가능한 초기 상태에서는 norm 삽입을 건너뜀
+            return;
+        }
+        if (scaleId == null) {
+            return;
+        }
         double mean = itemCount * 1.5; // 0~3 평균 1.5 가정
         double sd = itemCount * 0.9;
         jdbcTemplate.update("INSERT INTO norm (assessment_id, scale_id, group_code, mean, sd) VALUES (?, ?, 'default', ?, ?)", assessmentId, scaleId, mean, sd);
