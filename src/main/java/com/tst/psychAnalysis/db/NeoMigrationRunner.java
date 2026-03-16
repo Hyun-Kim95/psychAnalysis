@@ -105,8 +105,17 @@ public class NeoMigrationRunner implements ApplicationRunner {
     }
 
     private Long getAssessmentId(String name) {
-        List<Long> list = jdbcTemplate.query("SELECT id FROM assessment WHERE name = ? LIMIT 1", (rs, rowNum) -> rs.getLong("id"), name);
-        return list.isEmpty() ? null : list.get(0);
+        try {
+            List<Long> list = jdbcTemplate.query(
+                "SELECT id FROM assessment WHERE name = ? LIMIT 1",
+                (rs, rowNum) -> rs.getLong("id"),
+                name
+            );
+            return list.isEmpty() ? null : list.get(0);
+        } catch (BadSqlGrammarException ex) {
+            // assessment 테이블이 아직 없는 초기 상태에서는 null을 반환해 마이그레이션 흐름을 유지
+            return null;
+        }
     }
 
     private void deleteItemsAndNormsAndScales(Long assessmentId) {
