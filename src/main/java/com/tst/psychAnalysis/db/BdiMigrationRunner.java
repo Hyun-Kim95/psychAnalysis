@@ -6,6 +6,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.dao.EmptyResultDataAccessException;
 
 import java.util.List;
 
@@ -143,12 +144,8 @@ public class BdiMigrationRunner implements ApplicationRunner {
                 Long.class,
                 assessmentId
             );
-        } catch (BadSqlGrammarException ex) {
-            // scale 테이블이 아직 없거나 조회가 불가능한 초기 상태에서는 BDI 마이그레이션을 건너뜀
-            return;
-        }
-        if (scaleId == null) {
-            // 해당 assessment에 'D' 스케일이 아직 없으면 BDI 마이그레이션을 건너뜀
+        } catch (BadSqlGrammarException | EmptyResultDataAccessException ex) {
+            // scale 테이블이 없거나 해당 assessment에 'D' 스케일이 아직 없으면 BDI 마이그레이션을 건너뜀
             return;
         }
         for (int n = from; n <= to; n++) {
@@ -176,11 +173,8 @@ public class BdiMigrationRunner implements ApplicationRunner {
                 Long.class,
                 assessmentId
             );
-        } catch (BadSqlGrammarException ex) {
-            // scale 테이블이 아직 없거나 조회가 불가능한 초기 상태에서는 norm 삽입을 건너뜀
-            return;
-        }
-        if (scaleId == null) {
+        } catch (BadSqlGrammarException | EmptyResultDataAccessException ex) {
+            // scale 테이블이 없거나 해당 assessment에 'D' 스케일이 아직 없으면 norm 삽입을 건너뜀
             return;
         }
         double mean = itemCount * 1.5; // 0~3 평균 1.5 가정
