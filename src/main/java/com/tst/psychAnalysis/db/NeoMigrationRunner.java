@@ -3,6 +3,8 @@ package com.tst.psychAnalysis.db;
 import com.tst.psychAnalysis.assessment.NeoScaleInterpretation;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.dao.BadSqlGrammarException;
+import org.springframework.dao.DataAccessException;
 import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -59,18 +61,28 @@ public class NeoMigrationRunner implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        if (alreadyApplied()) return;
+        if (alreadyApplied()) {
+            return;
+        }
         runMigration();
     }
 
     private boolean alreadyApplied() {
-        Long shortCount = jdbcTemplate.query(
-            "SELECT COUNT(*) FROM item i JOIN assessment a ON a.id = i.assessment_id WHERE a.name = 'NEO 성격검사'",
-            (rs, rn) -> rs.getLong(1)).stream().findFirst().orElse(0L);
-        Long detailCount = jdbcTemplate.query(
-            "SELECT COUNT(*) FROM item i JOIN assessment a ON a.id = i.assessment_id WHERE a.name = 'NEO 성격검사 (상세)'",
-            (rs, rn) -> rs.getLong(1)).stream().findFirst().orElse(0L);
-        return shortCount == 29 && detailCount == 58;
+        try {
+            Long shortCount = jdbcTemplate.query(
+                "SELECT COUNT(*) FROM item i JOIN assessment a ON a.id = i.assessment_id WHERE a.name = 'NEO 성격검사'",
+                (rs, rn) -> rs.getLong(1)).stream().findFirst().orElse(0L);
+            Long detailCount = jdbcTemplate.query(
+                "SELECT COUNT(*) FROM item i JOIN assessment a ON a.id = i.assessment_id WHERE a.name = 'NEO 성격검사 (상세)'",
+                (rs, rn) -> rs.getLong(1)).stream().findFirst().orElse(0L);
+            return shortCount == 29 && detailCount == 58;
+        } catch (BadSqlGrammarException ex) {
+            // 테이블이 아직 없는 초기 상태에서는 마이그레이션을 수행하도록 처리
+            return false;
+        } catch (DataAccessException ex) {
+            // 기타 쿼리 오류가 발생해도 마이그레이션을 시도하도록 처리
+            return false;
+        }
     }
 
     private void runMigration() {
