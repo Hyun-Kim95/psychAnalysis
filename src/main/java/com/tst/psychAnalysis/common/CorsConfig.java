@@ -14,8 +14,9 @@ public class CorsConfig {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/api/**")
-                    .allowedOrigins(
-                        "https://psych-analysis.vercel.app",
+                    // vercel 프리뷰·프로덕션 도메인 패턴 모두 허용
+                    .allowedOriginPatterns(
+                        "https://psych-analysis*.vercel.app",
                         "http://localhost:5173"
                     )
                     .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
