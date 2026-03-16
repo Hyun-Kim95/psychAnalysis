@@ -3,6 +3,7 @@ package com.tst.psychAnalysis.db;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
+import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -31,9 +32,18 @@ public class Krq53MigrationRunner implements ApplicationRunner {
     }
 
     private boolean alreadyApplied() {
-        Long shortCount = jdbcTemplate.query("SELECT COUNT(*) FROM item i JOIN assessment a ON a.id = i.assessment_id WHERE a.name = '회복탄력성 검사'", (rs, rn) -> rs.getLong(1)).stream().findFirst().orElse(0L);
-        Long detailCount = jdbcTemplate.query("SELECT COUNT(*) FROM item i JOIN assessment a ON a.id = i.assessment_id WHERE a.name = '회복탄력성 검사 (상세)'", (rs, rn) -> rs.getLong(1)).stream().findFirst().orElse(0L);
-        return shortCount == 27 && detailCount == 53;
+        try {
+            Long shortCount = jdbcTemplate.query(
+                "SELECT COUNT(*) FROM item i JOIN assessment a ON a.id = i.assessment_id WHERE a.name = '회복탄력성 검사'",
+                (rs, rn) -> rs.getLong(1)).stream().findFirst().orElse(0L);
+            Long detailCount = jdbcTemplate.query(
+                "SELECT COUNT(*) FROM item i JOIN assessment a ON a.id = i.assessment_id WHERE a.name = '회복탄력성 검사 (상세)'",
+                (rs, rn) -> rs.getLong(1)).stream().findFirst().orElse(0L);
+            return shortCount == 27 && detailCount == 53;
+        } catch (BadSqlGrammarException ex) {
+            // item/assessment 테이블이 아직 없는 초기 상태에서는 마이그레이션을 수행하도록 처리
+            return false;
+        }
     }
 
     private void runMigration() {
@@ -63,8 +73,17 @@ public class Krq53MigrationRunner implements ApplicationRunner {
     }
 
     private Long getAssessmentId(String name) {
-        List<Long> list = jdbcTemplate.query("SELECT id FROM assessment WHERE name = ? LIMIT 1", (rs, rowNum) -> rs.getLong("id"), name);
-        return list.isEmpty() ? null : list.get(0);
+        try {
+            List<Long> list = jdbcTemplate.query(
+                "SELECT id FROM assessment WHERE name = ? LIMIT 1",
+                (rs, rowNum) -> rs.getLong("id"),
+                name
+            );
+            return list.isEmpty() ? null : list.get(0);
+        } catch (BadSqlGrammarException ex) {
+            // assessment 테이블이 아직 없는 초기 상태에서는 null을 반환
+            return null;
+        }
     }
 
     private void deleteExistingItemsAndScales(Long assessmentId) {

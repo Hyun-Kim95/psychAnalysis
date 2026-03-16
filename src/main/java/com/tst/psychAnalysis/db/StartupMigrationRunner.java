@@ -3,6 +3,7 @@ package com.tst.psychAnalysis.db;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
+import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -32,13 +33,18 @@ public class StartupMigrationRunner implements ApplicationRunner {
     }
 
     private boolean alreadyApplied() {
-        Long shortCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM item i JOIN assessment a ON a.id = i.assessment_id WHERE a.name = 'BAI 불안검사'",
-            Long.class);
-        Long detailCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM item i JOIN assessment a ON a.id = i.assessment_id WHERE a.name = 'BAI 불안검사 (상세)'",
-            Long.class);
-        return shortCount != null && shortCount == 11 && detailCount != null && detailCount == 21;
+        try {
+            Long shortCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM item i JOIN assessment a ON a.id = i.assessment_id WHERE a.name = 'BAI 불안검사'",
+                Long.class);
+            Long detailCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM item i JOIN assessment a ON a.id = i.assessment_id WHERE a.name = 'BAI 불안검사 (상세)'",
+                Long.class);
+            return shortCount != null && shortCount == 11 && detailCount != null && detailCount == 21;
+        } catch (BadSqlGrammarException ex) {
+            // item/assessment 테이블이 아직 없는 초기 상태에서는 마이그레이션을 수행하도록 처리
+            return false;
+        }
     }
 
     private void runMigration() {
