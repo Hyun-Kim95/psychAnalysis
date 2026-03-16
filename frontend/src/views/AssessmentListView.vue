@@ -49,6 +49,15 @@ const assessments = ref<AssessmentSummary[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 
+const DISPLAY_DESCRIPTIONS: Record<string, string> = {
+  'BDI 우울검사': 'Beck Depression Inventory(벡 우울척도)',
+  'BDI 우울검사 (상세)': 'Beck Depression Inventory(벡 우울척도, 21문항)',
+  '회복탄력성 검사': '한국인 회복탄력성 척도(KRQ)',
+  '회복탄력성 검사 (상세)': '한국인 회복탄력성 척도(KRQ-53)',
+  'NEO 성격검사': 'NEO 성격검사 (대학·성인용)',
+  'NEO 성격검사 (상세)': 'NEO 성격검사 (대학·성인용, 58문항)',
+}
+
 const assessmentGroups = computed(() => {
   const list = assessments.value
   const map = new Map<string, { baseName: string; description: string; versions: { assessment: AssessmentSummary; itemCount: number; isDetail: boolean }[] }>()
@@ -59,7 +68,10 @@ const assessmentGroups = computed(() => {
       map.set(baseName, { baseName, description: '', versions: [] })
     }
     const g = map.get(baseName)!
-    if (!g.description && a.description) g.description = a.description.replace(/\s*상세 버전.*$/, '').replace(/\s*간단 버전.*$/, '').trim()
+    if (!g.description) {
+      const display = DISPLAY_DESCRIPTIONS[a.name]
+      g.description = display || a.description?.replace(/\s*상세 버전.*$/, '').replace(/\s*간단 버전.*$/, '').trim() || ''
+    }
     g.versions.push({
       assessment: a,
       itemCount: a.itemCount ?? 0,
