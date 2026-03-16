@@ -120,7 +120,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { fetchResult, TCI_SCALE_ORDER, type ResultViewData } from '../api'
+import { fetchResult, getApiBaseUrl, TCI_SCALE_ORDER, type ResultViewData } from '../api'
 
 const router = useRouter()
 
@@ -166,7 +166,8 @@ onMounted(async () => {
 
 function downloadPdf() {
   if (!props.resultId) return
-  window.open(`/api/results/${props.resultId}/pdf`, '_blank')
+  const base = getApiBaseUrl()
+  window.open(`${base}/api/results/${props.resultId}/pdf`, '_blank')
 }
 
 function goMain() {

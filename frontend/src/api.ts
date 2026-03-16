@@ -1,5 +1,15 @@
 import axios from 'axios'
 
+const baseURL = typeof import.meta.env.VITE_API_URL === 'string' && import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace(/\/$/, '') // 끝 슬래시 제거
+  : ''
+if (baseURL) axios.defaults.baseURL = baseURL
+
+/** 배포 환경에서 API 기준 URL (예: PDF 링크용) */
+export function getApiBaseUrl(): string {
+  return baseURL
+}
+
 export interface AssessmentSummary {
   id: number
   name: string
