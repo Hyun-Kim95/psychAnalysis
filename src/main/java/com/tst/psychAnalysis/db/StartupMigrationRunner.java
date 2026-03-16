@@ -25,11 +25,16 @@ public class StartupMigrationRunner implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        if (alreadyApplied()) {
-            return;
+        try {
+            if (alreadyApplied()) {
+                return;
+            }
+            runMigration();
+            recordInFlywayHistory();
+        } catch (BadSqlGrammarException ex) {
+            // 초기 스키마(assessment/item/choice/norm/flyway_schema_history 등)가 없는 경우에는
+            // BAI 마이그레이션을 건너뛰고 애플리케이션 기동을 계속 진행
         }
-        runMigration();
-        recordInFlywayHistory();
     }
 
     private boolean alreadyApplied() {
