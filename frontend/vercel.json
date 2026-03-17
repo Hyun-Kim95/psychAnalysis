@@ -2,6 +2,6 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!google33b21a72f2e22b5e\\.html|naver1138a47f1ef4a4a630e04dfa7e7a5473\\.html).*)", "destination": "/index.html" }
   ]
 }
