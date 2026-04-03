@@ -33,21 +33,14 @@
       </div>
 
       <template v-if="orderedScaleCodes.length">
-        <h3 class="result-subtitle">척도별 점수 그래프</h3>
+        <h3 class="result-subtitle">척도별 T점수 그래프</h3>
         <p class="result-chart-hint">
-          막대 색: T점수 기준 — 파란색(40 미만), 회색(40~60), 주황색(60 초과). 세로 점선은 규준 평균 <strong>50</strong>입니다.
+          막대 색: T점수 기준 — 파란색(40 미만), 회색(40~60), 주황색(60 초과). 세로 점선은 규준 평균 <strong>50</strong>입니다. 원점수는 아래 표에서 확인할 수 있습니다.
         </p>
-        <div class="result-charts">
+        <div class="result-charts result-charts--single">
           <div class="result-chart-wrap">
-            <h4 class="result-chart-title">T 점수</h4>
             <div class="result-chart-canvas" :style="{ height: chartHeightPx + 'px' }">
               <canvas ref="chartTScoreCanvas" />
-            </div>
-          </div>
-          <div class="result-chart-wrap">
-            <h4 class="result-chart-title">원점수</h4>
-            <div class="result-chart-canvas" :style="{ height: chartHeightPx + 'px' }">
-              <canvas ref="chartRawCanvas" />
             </div>
           </div>
         </div>
@@ -155,7 +148,6 @@ const error = ref<string | null>(null)
 const data = ref<ResultViewData | null>(null)
 
 const chartTScoreCanvas = ref<HTMLCanvasElement | null>(null)
-const chartRawCanvas = ref<HTMLCanvasElement | null>(null)
 let chartInstances: Chart[] = []
 
 const scaleOrder = computed(() => data.value?.scaleOrder?.length ? data.value.scaleOrder! : [...TCI_SCALE_ORDER])
@@ -186,7 +178,8 @@ const orderedScaleCodes = computed(() => {
 const chartHeightPx = computed(() => {
   const n = orderedScaleCodes.value.length
   if (n <= 0) return 200
-  return Math.min(560, Math.max(200, 36 + n * 32))
+  // T점수 차트만 표시 — NEO 등 척도 수가 많을 때 잘림 방지
+  return Math.min(900, Math.max(200, 40 + n * 28))
 })
 
 function scaleLabel(code: string) {
@@ -226,7 +219,6 @@ function buildResultCharts() {
   const codes = orderedScaleCodes.value
   const labels = codes.map((c) => chartAxisLabel(c))
   const tValues = codes.map((c) => d.scaleTScores[c] ?? 0)
-  const rawValues = codes.map((c) => d.scaleRawScores[c] ?? 0)
   const tColors = tValues.map((t) => tScoreBarColor(t))
 
   const commonOptions = {
@@ -292,27 +284,6 @@ function buildResultCharts() {
           },
         },
       },
-    })
-    chartInstances.push(chart)
-    chart.resize()
-  }
-
-  if (chartRawCanvas.value) {
-    const chart = new Chart(chartRawCanvas.value, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [
-          {
-            label: '원점수',
-            data: rawValues,
-            backgroundColor: 'rgba(99, 102, 241, 0.75)',
-            borderColor: 'rgba(79, 70, 229, 0.9)',
-            borderWidth: 1,
-          },
-        ],
-      },
-      options: commonOptions,
     })
     chartInstances.push(chart)
     chart.resize()

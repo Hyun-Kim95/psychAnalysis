@@ -88,27 +88,20 @@ public class ResultPdfService {
                 drawTextAt(cs, font, summary, margin, y, 12);
                 y -= 20;
 
-                // T점수 설명
-                cs.setNonStrokingColor(new Color(71, 85, 105));
-                drawTextAt(cs, font, "T점수: 평균 50, 표준편차 10의 표준화 점수입니다. 50에 가까우면 평균 수준, 60 이상은 높은 편, 40 미만은 낮은 편으로 해석합니다.", margin, y, 9);
-                y -= 14;
-
                 cs.setNonStrokingColor(Color.BLACK);
 
+                // T점수 그래프는 요약 직후·첫 페이지 상단에 두어 공간 확보 (NEO 등 척도 많을 때 행 높이 자동 축소)
                 List<String> codesInOrder = buildCodesInOrder(assessmentName, scaleOrder, scaleRaw, scaleT);
                 if (!codesInOrder.isEmpty()) {
-                    float chartBlockH = estimateChartBlockHeight(codesInOrder.size());
-                    if (y - chartBlockH < minY) {
-                        cs.close();
-                        page = new PDPage(PDRectangle.A4);
-                        document.addPage(page);
-                        cs = new PDPageContentStream(document, page);
-                        y = pageHeight - margin;
-                        cs.setNonStrokingColor(Color.BLACK);
-                    }
-                    y = drawScaleBarCharts(cs, font, marginLeft, marginRight, pageWidth, y, codesInOrder, displayNames, scaleRaw, scaleT);
-                    y -= 12;
+                    y = drawScaleBarCharts(cs, font, marginLeft, marginRight, pageWidth, y, codesInOrder, displayNames, scaleT, minY);
+                    y -= 10;
                 }
+
+                // T점수 설명 (그래프 아래 한 줄)
+                cs.setNonStrokingColor(new Color(71, 85, 105));
+                drawTextAt(cs, font, "T점수: 평균 50·표준편차 10. 50 근처=평균, 60 이상=높은 편, 40 미만=낮은 편.", margin, y, 9);
+                y -= 14;
+                cs.setNonStrokingColor(Color.BLACK);
 
                 // 척도별 점수 테이블. NEO는 주척도별 그룹 헤더 행 + 스타일 적용
                 float tableWidth = pageWidth - marginLeft - marginRight;
@@ -336,64 +329,45 @@ public class ResultPdfService {
         return out;
     }
 
-    private static float estimateChartBlockHeight(int n) {
-        if (n <= 0) return 0;
-        // 회전 눈금·격자·캡션 여유
-        return 22 + 26 + 18 + (32 + n * 18f + 95) * 2 + 14;
-    }
-
     /**
-     * 척도별 T점수·원점수 가로 막대. PDF는 화면과 동일 데이터를 잘리지 않게 위·아래 풀 너비로 배치합니다.
+     * 척도별 T점수 가로 막대만 표시(원점수는 표에서 확인).
+     * @param minAllowedY 플롯 하단이 내려갈 수 있는 최소 y (페이지 여백)
      */
     private float drawScaleBarCharts(PDPageContentStream cs, PDFont font,
                                      float marginL, float marginR, float pageWidth, float y,
                                      List<String> codes, Map<String, String> displayNames,
-                                     Map<String, Double> scaleRaw, Map<String, Double> scaleT) throws Exception {
+                                     Map<String, Double> scaleT, float minAllowedY) throws Exception {
         cs.setNonStrokingColor(new Color(55, 65, 81));
-        drawTextAt(cs, font, "■ 척도별 점수 그래프", marginL, y, 11);
+        drawTextAt(cs, font, "■ 척도별 T점수 그래프", marginL, y, 11);
         y -= 16;
         cs.setNonStrokingColor(new Color(100, 116, 139));
-        for (String line : wrap("막대 색(T): 파란 40 미만, 회색 40~60, 주황 60 초과. T차트 세로선은 T=50 규준.", 52)) {
+        java.util.List<String> hintLines = wrap(
+                "막대 색(T): 파란·회색·주황(40/60 기준). 세로선 T=50. 원점수는 아래 표.", 58);
+        for (String line : hintLines) {
             drawTextAt(cs, font, line, marginL, y, 8);
-            y -= 11;
+            y -= 10;
         }
         cs.setNonStrokingColor(Color.BLACK);
-        y -= 8;
+        y -= 6;
+
+        float panelFixed = 26 + 22 + 48 + 34 + 22;
+        float avail = y - minAllowedY - 10;
+        int n = codes.size();
+        float rowH = 18f;
+        if (n > 0 && avail > panelFixed) {
+            float maxRow = (avail - panelFixed) / n;
+            rowH = Math.max(10.5f, Math.min(18f, maxRow));
+        }
 
         float totalW = pageWidth - marginL - marginR;
         float labelCol = Math.min(220, Math.max(130, totalW * 0.40f));
-        float rowH = 18;
-        float labelFont = 7.5f;
-        float axisFont = 7f;
+        float labelFont = rowH < 13.5f ? 6.8f : 7.5f;
+        float axisFont = 6.8f;
         float boxPad = 8;
         float cornerR = 6f;
 
-        double minT = 50;
-        double maxT = 50;
-        for (String code : codes) {
-            double tv = scaleT.getOrDefault(code, 0.0);
-            minT = Math.min(minT, tv);
-            maxT = Math.max(maxT, tv);
-        }
-        double padT = 6;
-        minT = Math.max(0, Math.floor((minT - padT) / 5) * 5);
-        maxT = Math.ceil((maxT + padT) / 5) * 5;
-        if (maxT <= minT) maxT = minT + 10;
-
-        double maxRaw = 1;
-        for (String code : codes) {
-            maxRaw = Math.max(maxRaw, scaleRaw.getOrDefault(code, 0.0));
-        }
-        maxRaw = Math.ceil(maxRaw * 1.08 * 10) / 10;
-
-        y = drawOneBarChartPanel(cs, font, marginL, totalW, y, codes, displayNames, scaleT, true,
-                minT, maxT, 0, maxRaw, labelCol, rowH, labelFont, axisFont, boxPad, cornerR);
-        y -= 14;
-
-        y = drawOneBarChartPanel(cs, font, marginL, totalW, y, codes, displayNames, scaleRaw, false,
-                minT, maxT, 0, maxRaw, labelCol, rowH, labelFont, axisFont, boxPad, cornerR);
-
-        return y;
+        return drawOneBarChartPanel(cs, font, marginL, totalW, y, codes, displayNames, scaleT, true,
+                0, 0, 0, 0, labelCol, rowH, labelFont, axisFont, boxPad, cornerR);
     }
 
     /**
@@ -521,13 +495,15 @@ public class ResultPdfService {
         }
         cs.setNonStrokingColor(Color.BLACK);
 
-        float axisCaptionY = tickLabelY - 38;
+        float capDrop = rowH < 13.5f ? 28f : 34f;
+        float axisCaptionY = tickLabelY - capDrop;
         cs.setNonStrokingColor(new Color(100, 116, 139));
         if (isTScore) {
             String cap = String.format(java.util.Locale.KOREA, "T점수 (규준 평균 50). 표시 범위 %.0f ~ %.0f", axisMin, axisMax);
-            for (String line : wrap(cap, 58)) {
+            int wrapLen = rowH < 13.5f ? 52 : 58;
+            for (String line : wrap(cap, wrapLen)) {
                 drawTextAt(cs, font, line, plotX, axisCaptionY, axisFont);
-                axisCaptionY -= 10;
+                axisCaptionY -= rowH < 13.5f ? 9 : 10;
             }
         } else {
             String cap = String.format(java.util.Locale.KOREA, "원점수 (0 ~ %.1f)", axisMax);
@@ -536,7 +512,7 @@ public class ResultPdfService {
         }
         cs.setNonStrokingColor(Color.BLACK);
 
-        float panelBottomY = axisCaptionY - 12;
+        float panelBottomY = axisCaptionY - (rowH < 13.5f ? 8 : 12);
         float boxH = panelTopY - panelBottomY;
         float bx = originX - boxPad;
         float bw = totalW + 2 * boxPad;
