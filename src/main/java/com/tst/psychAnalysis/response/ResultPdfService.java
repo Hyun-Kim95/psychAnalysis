@@ -12,10 +12,12 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.util.Matrix;
 import org.springframework.stereotype.Service;
 
 import java.awt.*;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -92,6 +94,21 @@ public class ResultPdfService {
                 y -= 14;
 
                 cs.setNonStrokingColor(Color.BLACK);
+
+                List<String> codesInOrder = buildCodesInOrder(assessmentName, scaleOrder, scaleRaw, scaleT);
+                if (!codesInOrder.isEmpty()) {
+                    float chartBlockH = estimateChartBlockHeight(codesInOrder.size());
+                    if (y - chartBlockH < minY) {
+                        cs.close();
+                        page = new PDPage(PDRectangle.A4);
+                        document.addPage(page);
+                        cs = new PDPageContentStream(document, page);
+                        y = pageHeight - margin;
+                        cs.setNonStrokingColor(Color.BLACK);
+                    }
+                    y = drawScaleBarCharts(cs, font, marginLeft, marginRight, pageWidth, y, codesInOrder, displayNames, scaleRaw, scaleT);
+                    y -= 12;
+                }
 
                 // 척도별 점수 테이블. NEO는 주척도별 그룹 헤더 행 + 스타일 적용
                 float tableWidth = pageWidth - marginLeft - marginRight;
@@ -296,6 +313,316 @@ public class ResultPdfService {
             }
         }
         return groups;
+    }
+
+    /** 테이블·화면과 동일한 순서로, 원점수 또는 T점수가 있는 척도 코드만 나열 */
+    private List<String> buildCodesInOrder(String assessmentName, List<String> scaleOrder,
+                                            Map<String, Double> scaleRaw, Map<String, Double> scaleT) {
+        List<ScaleGroupDto> scaleGroups = buildScaleGroupsIfNeo(assessmentName, scaleOrder);
+        List<String> out = new ArrayList<>();
+        if (!scaleGroups.isEmpty()) {
+            for (ScaleGroupDto group : scaleGroups) {
+                for (String code : group.scaleCodes()) {
+                    if (scaleRaw.get(code) == null && scaleT.get(code) == null) continue;
+                    out.add(code);
+                }
+            }
+        } else {
+            for (String code : scaleOrder) {
+                if (scaleRaw.get(code) == null && scaleT.get(code) == null) continue;
+                out.add(code);
+            }
+        }
+        return out;
+    }
+
+    private static float estimateChartBlockHeight(int n) {
+        if (n <= 0) return 0;
+        // 회전 눈금·격자·캡션 여유
+        return 22 + 26 + 18 + (32 + n * 18f + 95) * 2 + 14;
+    }
+
+    /**
+     * 척도별 T점수·원점수 가로 막대. PDF는 화면과 동일 데이터를 잘리지 않게 위·아래 풀 너비로 배치합니다.
+     */
+    private float drawScaleBarCharts(PDPageContentStream cs, PDFont font,
+                                     float marginL, float marginR, float pageWidth, float y,
+                                     List<String> codes, Map<String, String> displayNames,
+                                     Map<String, Double> scaleRaw, Map<String, Double> scaleT) throws Exception {
+        cs.setNonStrokingColor(new Color(55, 65, 81));
+        drawTextAt(cs, font, "■ 척도별 점수 그래프", marginL, y, 11);
+        y -= 16;
+        cs.setNonStrokingColor(new Color(100, 116, 139));
+        for (String line : wrap("막대 색(T): 파란 40 미만, 회색 40~60, 주황 60 초과. T차트 세로선은 T=50 규준.", 52)) {
+            drawTextAt(cs, font, line, marginL, y, 8);
+            y -= 11;
+        }
+        cs.setNonStrokingColor(Color.BLACK);
+        y -= 8;
+
+        float totalW = pageWidth - marginL - marginR;
+        float labelCol = Math.min(220, Math.max(130, totalW * 0.40f));
+        float rowH = 18;
+        float labelFont = 7.5f;
+        float axisFont = 7f;
+        float boxPad = 8;
+        float cornerR = 6f;
+
+        double minT = 50;
+        double maxT = 50;
+        for (String code : codes) {
+            double tv = scaleT.getOrDefault(code, 0.0);
+            minT = Math.min(minT, tv);
+            maxT = Math.max(maxT, tv);
+        }
+        double padT = 6;
+        minT = Math.max(0, Math.floor((minT - padT) / 5) * 5);
+        maxT = Math.ceil((maxT + padT) / 5) * 5;
+        if (maxT <= minT) maxT = minT + 10;
+
+        double maxRaw = 1;
+        for (String code : codes) {
+            maxRaw = Math.max(maxRaw, scaleRaw.getOrDefault(code, 0.0));
+        }
+        maxRaw = Math.ceil(maxRaw * 1.08 * 10) / 10;
+
+        y = drawOneBarChartPanel(cs, font, marginL, totalW, y, codes, displayNames, scaleT, true,
+                minT, maxT, 0, maxRaw, labelCol, rowH, labelFont, axisFont, boxPad, cornerR);
+        y -= 14;
+
+        y = drawOneBarChartPanel(cs, font, marginL, totalW, y, codes, displayNames, scaleRaw, false,
+                minT, maxT, 0, maxRaw, labelCol, rowH, labelFont, axisFont, boxPad, cornerR);
+
+        return y;
+    }
+
+    /**
+     * 웹 차트와 유사: 수치 X축·10단위 격자·45° 눈금·T=50 기준선·라벨 우측 정렬·플롯 배경·둥근 테두리.
+     */
+    private float drawOneBarChartPanel(PDPageContentStream cs, PDFont font,
+                                       float originX, float totalW, float y,
+                                       List<String> codes, Map<String, String> displayNames,
+                                       Map<String, Double> values, boolean isTScore,
+                                       double minT, double maxT, double minRaw, double maxRaw,
+                                       float labelCol, float rowH, float labelFont, float axisFont,
+                                       float boxPad, float cornerR) throws Exception {
+        float innerRightPad = 14;
+        float plotW = Math.max(100, totalW - labelCol - innerRightPad);
+        float plotX = originX + labelCol;
+
+        double axisMin;
+        double axisMax;
+        double tickStep;
+        if (isTScore) {
+            double vmin = Double.POSITIVE_INFINITY;
+            double vmax = Double.NEGATIVE_INFINITY;
+            for (String code : codes) {
+                double v = values.getOrDefault(code, 0.0);
+                vmin = Math.min(vmin, v);
+                vmax = Math.max(vmax, v);
+            }
+            axisMin = Math.max(0, Math.floor(vmin / 10) * 10 - 10);
+            axisMax = Math.ceil(vmax / 10) * 10 + 10;
+            if (axisMax <= axisMin) axisMax = axisMin + 40;
+            axisMin = Math.min(axisMin, 50);
+            axisMax = Math.max(axisMax, 60);
+            tickStep = 10;
+        } else {
+            axisMin = 0;
+            axisMax = maxRaw;
+            if (axisMax <= axisMin) axisMax = axisMin + 10;
+            tickStep = pickNiceTickStep(axisMax);
+            axisMax = Math.ceil(axisMax / tickStep) * tickStep;
+            if (axisMax <= 0) axisMax = tickStep;
+        }
+
+        float panelTopY = y + 16;
+        String panelTitle = isTScore ? "T 점수" : "원점수";
+        cs.setNonStrokingColor(new Color(30, 64, 175));
+        drawTextAt(cs, font, panelTitle, originX + boxPad * 0.5f, y, 11);
+        cs.setNonStrokingColor(Color.BLACK);
+        y -= rowH + 4;
+
+        float chartTop = y + 2;
+        float barBottomY = y - codes.size() * rowH - 2;
+        float axisLineY = barBottomY - 2;
+        float maxLabelW = labelCol - 10;
+
+        // 플롯 배경 (카드 내부)
+        cs.setNonStrokingColor(new Color(249, 250, 251));
+        cs.addRect(plotX, barBottomY - 2, plotW, chartTop - barBottomY + 4);
+        cs.fill();
+        cs.setNonStrokingColor(Color.BLACK);
+
+        // 세로 격자선 + X=0 기준 가로선
+        cs.setStrokingColor(new Color(229, 231, 235));
+        cs.setLineWidth(0.6f);
+        for (double t = axisMin; t <= axisMax + 1e-6; t += tickStep) {
+            float gx = valueToPlotX(t, axisMin, axisMax, plotX, plotW);
+            cs.moveTo(gx, barBottomY - 2);
+            cs.lineTo(gx, chartTop + 2);
+        }
+        cs.stroke();
+        cs.setStrokingColor(new Color(209, 213, 219));
+        cs.setLineWidth(1f);
+        cs.moveTo(plotX, axisLineY);
+        cs.lineTo(plotX + plotW, axisLineY);
+        cs.stroke();
+        cs.setStrokingColor(Color.BLACK);
+        cs.setLineWidth(1f);
+
+        // 막대
+        for (String code : codes) {
+            String full = displayNames.getOrDefault(code, code) + " (" + code + ")";
+            String lab = truncateLabelToFit(font, full, maxLabelW, labelFont);
+            double val = values.getOrDefault(code, 0.0);
+            float barW = isTScore
+                    ? (float) ((val - axisMin) / (axisMax - axisMin)) * plotW
+                    : (float) ((val - axisMin) / (axisMax - axisMin)) * plotW;
+
+            float baseline = y - 5;
+            drawTextRightAligned(cs, font, lab, originX + labelCol - 4, baseline, labelFont);
+
+            if (isTScore) {
+                cs.setNonStrokingColor(tScoreColor(val));
+            } else {
+                cs.setNonStrokingColor(new Color(129, 140, 248));
+            }
+            float barH = rowH - 7;
+            float barY = y - rowH + 5;
+            cs.addRect(plotX, barY, Math.max(0.5f, barW), barH);
+            cs.fill();
+            cs.setNonStrokingColor(Color.BLACK);
+
+            y -= rowH;
+        }
+
+        // T=50 기준선 (막대·격자 위)
+        if (isTScore && 50 >= axisMin && 50 <= axisMax) {
+            float lineX = valueToPlotX(50, axisMin, axisMax, plotX, plotW);
+            cs.setStrokingColor(new Color(99, 102, 241));
+            cs.setLineWidth(1.8f);
+            cs.moveTo(lineX, chartTop + 3);
+            cs.lineTo(lineX, barBottomY - 2);
+            cs.stroke();
+            cs.setLineWidth(1f);
+            cs.setStrokingColor(Color.BLACK);
+        }
+
+        // X축 눈금 숫자 (약 45° 기울임, 웹 차트와 유사)
+        float tickLabelY = axisLineY - 6;
+        cs.setNonStrokingColor(new Color(71, 85, 105));
+        for (double t = axisMin; t <= axisMax + 1e-6; t += tickStep) {
+            float gx = valueToPlotX(t, axisMin, axisMax, plotX, plotW);
+            String lab = isTScore
+                    ? String.format(java.util.Locale.KOREA, "%.0f", t)
+                    : (tickStep >= 1 ? String.format(java.util.Locale.KOREA, "%.0f", t) : String.format(java.util.Locale.KOREA, "%.1f", t));
+            drawTextRotatedCcW(cs, font, lab, axisFont, gx, tickLabelY, -42);
+        }
+        cs.setNonStrokingColor(Color.BLACK);
+
+        float axisCaptionY = tickLabelY - 38;
+        cs.setNonStrokingColor(new Color(100, 116, 139));
+        if (isTScore) {
+            String cap = String.format(java.util.Locale.KOREA, "T점수 (규준 평균 50). 표시 범위 %.0f ~ %.0f", axisMin, axisMax);
+            for (String line : wrap(cap, 58)) {
+                drawTextAt(cs, font, line, plotX, axisCaptionY, axisFont);
+                axisCaptionY -= 10;
+            }
+        } else {
+            String cap = String.format(java.util.Locale.KOREA, "원점수 (0 ~ %.1f)", axisMax);
+            drawTextAt(cs, font, cap, plotX, axisCaptionY, axisFont);
+            axisCaptionY -= 10;
+        }
+        cs.setNonStrokingColor(Color.BLACK);
+
+        float panelBottomY = axisCaptionY - 12;
+        float boxH = panelTopY - panelBottomY;
+        float bx = originX - boxPad;
+        float bw = totalW + 2 * boxPad;
+        cs.setStrokingColor(new Color(203, 213, 225));
+        cs.setLineWidth(1f);
+        strokeRoundedRect(cs, bx, panelBottomY, bw, boxH, cornerR);
+        cs.setStrokingColor(Color.BLACK);
+
+        return panelBottomY - 8;
+    }
+
+    private static float valueToPlotX(double value, double axisMin, double axisMax, float plotX, float plotW) {
+        double span = axisMax - axisMin;
+        if (span <= 0) return plotX;
+        double f = (value - axisMin) / span;
+        return plotX + (float) (f * plotW);
+    }
+
+    private static double pickNiceTickStep(double span) {
+        if (span <= 0) return 1;
+        if (span <= 15) return 2;
+        if (span <= 40) return 5;
+        if (span <= 100) return 10;
+        return Math.pow(10, Math.floor(Math.log10(span)));
+    }
+
+    private void drawTextRightAligned(PDPageContentStream cs, PDFont font, String text, float rightX, float baselineY, float fontSize) throws Exception {
+        if (text == null || text.isEmpty()) return;
+        float w = font.getStringWidth(text) / 1000f * fontSize;
+        drawTextAt(cs, font, text, rightX - w, baselineY, fontSize);
+    }
+
+    /** degCcW: 음수면 시계 방향 기울임(눈금 아래 숫자에 흔한 형태). */
+    private void drawTextRotatedCcW(PDPageContentStream cs, PDFont font, String text, float fontSize, float cx, float cy, double degCcW) throws Exception {
+        if (text == null || text.isEmpty()) return;
+        float sw = font.getStringWidth(text) / 1000f * fontSize;
+        double rad = Math.toRadians(degCcW);
+        cs.beginText();
+        cs.setFont(font, fontSize);
+        Matrix m = Matrix.getTranslateInstance(cx, cy);
+        m.concatenate(Matrix.getRotateInstance(rad, 0, 0));
+        m.concatenate(Matrix.getTranslateInstance(-sw / 2f, -fontSize * 0.15f));
+        cs.setTextMatrix(m);
+        cs.showText(text);
+        cs.endText();
+    }
+
+    /** (x,y)=좌하단, 높이 h는 위로. 둥근 사각형 테두리만 stroke. */
+    private static void strokeRoundedRect(PDPageContentStream cs, float x, float y, float w, float h, float r) throws IOException {
+        r = Math.min(r, Math.min(w, h) / 2f);
+        float x0 = x;
+        float y0 = y;
+        float x1 = x + w;
+        float y1 = y + h;
+        float c = 0.5522847498f * r;
+        cs.moveTo(x0 + r, y0);
+        cs.lineTo(x1 - r, y0);
+        cs.curveTo(x1 - r + c, y0, x1, y0 + r - c, x1, y0 + r);
+        cs.lineTo(x1, y1 - r);
+        cs.curveTo(x1, y1 - r + c, x1 - r + c, y1, x1 - r, y1);
+        cs.lineTo(x0 + r, y1);
+        cs.curveTo(x0 + r - c, y1, x0, y1 - r + c, x0, y1 - r);
+        cs.lineTo(x0, y0 + r);
+        cs.curveTo(x0, y0 + r - c, x0 + r - c, y0, x0 + r, y0);
+        cs.closePath();
+        cs.stroke();
+    }
+
+    /** PDF 폰트 기준으로 너비에 맞게 말줄임(…). */
+    private static String truncateLabelToFit(PDFont font, String text, float maxWidthPt, float fontSize) throws IOException {
+        if (text == null || text.isEmpty()) return "";
+        float w = font.getStringWidth(text) / 1000f * fontSize;
+        if (w <= maxWidthPt) return text;
+        String ell = "…";
+        for (int len = text.length() - 1; len >= 1; len--) {
+            String s = text.substring(0, len) + ell;
+            float sw = font.getStringWidth(s) / 1000f * fontSize;
+            if (sw <= maxWidthPt) return s;
+        }
+        return ell;
+    }
+
+    private static Color tScoreColor(double t) {
+        if (t < 40) return new Color(59, 130, 246);
+        if (t > 60) return new Color(245, 158, 11);
+        return new Color(107, 114, 128);
     }
 
     private Map<String, Double> readMap(String json) {

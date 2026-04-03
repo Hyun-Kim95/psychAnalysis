@@ -32,6 +32,27 @@
         <p>50에 가까울수록 규준 집단의 평균 수준이며, <strong>60 이상</strong>이면 상대적으로 높은 편, <strong>40 미만</strong>이면 상대적으로 낮은 편으로 해석할 수 있습니다. 척도마다 원점수 단위가 달라도 T점수로는 서로 비교가 가능합니다.</p>
       </div>
 
+      <template v-if="orderedScaleCodes.length">
+        <h3 class="result-subtitle">척도별 점수 그래프</h3>
+        <p class="result-chart-hint">
+          막대 색: T점수 기준 — 파란색(40 미만), 회색(40~60), 주황색(60 초과). 세로 점선은 규준 평균 <strong>50</strong>입니다.
+        </p>
+        <div class="result-charts">
+          <div class="result-chart-wrap">
+            <h4 class="result-chart-title">T 점수</h4>
+            <div class="result-chart-canvas" :style="{ height: chartHeightPx + 'px' }">
+              <canvas ref="chartTScoreCanvas" />
+            </div>
+          </div>
+          <div class="result-chart-wrap">
+            <h4 class="result-chart-title">원점수</h4>
+            <div class="result-chart-canvas" :style="{ height: chartHeightPx + 'px' }">
+              <canvas ref="chartRawCanvas" />
+            </div>
+          </div>
+        </div>
+      </template>
+
       <h3 class="result-subtitle">척도별 점수 (엑셀 규준 기준)</h3>
       <table class="scale-table">
         <thead>
@@ -76,7 +97,7 @@
               class="interpretation-block"
             >
               <h4 class="interpretation-scale">{{ scaleLabel(code) }} · T {{ (data.scaleTScores[code] ?? 0).toFixed(1) }}</h4>
-              <p class="interpretation-text">{{ data.scaleInterpretations[code] }}</p>
+              <p class="interpretation-text">{{ data.scaleInterpretations?.[code] }}</p>
             </div>
           </template>
         </template>
@@ -88,7 +109,7 @@
             class="interpretation-block"
           >
             <h4 class="interpretation-scale">{{ scaleLabel(code) }} · T {{ (data.scaleTScores[code] ?? 0).toFixed(1) }}</h4>
-            <p class="interpretation-text">{{ data.scaleInterpretations[code] }}</p>
+            <p class="interpretation-text">{{ data.scaleInterpretations?.[code] }}</p>
           </div>
         </template>
         <p v-if="hasAnyInterpretation === false" class="interpretation-generic">
@@ -118,7 +139,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { Chart } from 'chart.js/auto'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchResult, getApiBaseUrl, TCI_SCALE_ORDER, type ResultViewData } from '../api'
 
@@ -132,6 +154,10 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 const data = ref<ResultViewData | null>(null)
 
+const chartTScoreCanvas = ref<HTMLCanvasElement | null>(null)
+const chartRawCanvas = ref<HTMLCanvasElement | null>(null)
+let chartInstances: Chart[] = []
+
 const scaleOrder = computed(() => data.value?.scaleOrder?.length ? data.value.scaleOrder! : [...TCI_SCALE_ORDER])
 const scaleGroups = computed(() => data.value?.scaleGroups?.length ? data.value.scaleGroups : [])
 const hasAnyInterpretation = computed(() => {
@@ -139,15 +165,177 @@ const hasAnyInterpretation = computed(() => {
   if (!interp) return false
   return Object.keys(interp).some((code) => interp[code])
 })
+
+/** 표·그래프에 쓰는 척도 순서 (데이터가 있는 척도만) */
+const orderedScaleCodes = computed(() => {
+  const d = data.value
+  if (!d) return []
+  const groups = scaleGroups.value
+  if (groups.length) {
+    const out: string[] = []
+    for (const g of groups) {
+      for (const code of g.scaleCodes) {
+        if (hasScaleData(code)) out.push(code)
+      }
+    }
+    return out
+  }
+  return scaleOrder.value.filter((code) => hasScaleData(code))
+})
+
+const chartHeightPx = computed(() => {
+  const n = orderedScaleCodes.value.length
+  if (n <= 0) return 200
+  return Math.min(560, Math.max(200, 36 + n * 32))
+})
+
 function scaleLabel(code: string) {
   const names = data.value?.scaleDisplayNames
   return (names && names[code]) ? `${names[code]} (${code})` : code
 }
+
+/** 그래프 Y축용 짧은 라벨 */
+function chartAxisLabel(code: string) {
+  const names = data.value?.scaleDisplayNames
+  if (names?.[code]) return names[code]
+  return code
+}
+
 function hasScaleData(code: string) {
   return data.value != null && (
     data.value.scaleRawScores[code] != null || data.value.scaleTScores[code] != null
   )
 }
+
+function tScoreBarColor(t: number) {
+  if (t < 40) return 'rgba(59, 130, 246, 0.82)'
+  if (t > 60) return 'rgba(245, 158, 11, 0.82)'
+  return 'rgba(107, 114, 128, 0.72)'
+}
+
+function destroyResultCharts() {
+  chartInstances.forEach((c) => c.destroy())
+  chartInstances = []
+}
+
+function buildResultCharts() {
+  destroyResultCharts()
+  const d = data.value
+  if (!d || !orderedScaleCodes.value.length) return
+
+  const codes = orderedScaleCodes.value
+  const labels = codes.map((c) => chartAxisLabel(c))
+  const tValues = codes.map((c) => d.scaleTScores[c] ?? 0)
+  const rawValues = codes.map((c) => d.scaleRawScores[c] ?? 0)
+  const tColors = tValues.map((t) => tScoreBarColor(t))
+
+  const commonOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    indexAxis: 'y' as const,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          title: (items: { label: string; dataIndex: number }[]) => {
+            const i = items[0]?.dataIndex ?? 0
+            return scaleLabel(codes[i])
+          },
+        },
+      },
+    },
+    scales: {
+      x: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.06)' } },
+      y: { grid: { display: false }, ticks: { font: { size: 12 } } },
+    },
+  }
+
+  if (chartTScoreCanvas.value) {
+    const tMin = Math.min(...tValues, 50)
+    const tMax = Math.max(...tValues, 50)
+    const pad = 6
+    const chart = new Chart(chartTScoreCanvas.value, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'T 점수',
+            data: tValues,
+            backgroundColor: tColors,
+            borderWidth: 0,
+          },
+        ],
+      },
+      options: {
+        ...commonOptions,
+        scales: {
+          ...commonOptions.scales,
+          x: {
+            ...commonOptions.scales.x,
+            min: Math.max(0, Math.floor((tMin - pad) / 5) * 5),
+            max: Math.ceil((tMax + pad) / 5) * 5,
+            grid: {
+              color: (ctx) => {
+                if (ctx.tick.value === 50) return 'rgba(99, 102, 241, 0.5)'
+                return 'rgba(0,0,0,0.06)'
+              },
+              lineWidth: (ctx) => (ctx.tick.value === 50 ? 2 : 1),
+            },
+            ticks: {
+              stepSize: 5,
+              callback(value: string | number) {
+                const n = typeof value === 'number' ? value : Number(value)
+                return Number.isFinite(n) ? n : value
+              },
+            },
+          },
+        },
+      },
+    })
+    chartInstances.push(chart)
+    chart.resize()
+  }
+
+  if (chartRawCanvas.value) {
+    const chart = new Chart(chartRawCanvas.value, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: '원점수',
+            data: rawValues,
+            backgroundColor: 'rgba(99, 102, 241, 0.75)',
+            borderColor: 'rgba(79, 70, 229, 0.9)',
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: commonOptions,
+    })
+    chartInstances.push(chart)
+    chart.resize()
+  }
+}
+
+async function refreshCharts() {
+  await nextTick()
+  setTimeout(() => buildResultCharts(), 80)
+}
+
+watch(
+  () => [data.value, loading.value, orderedScaleCodes.value.join(',')] as const,
+  () => {
+    if (loading.value || !data.value || !orderedScaleCodes.value.length) {
+      destroyResultCharts()
+      return
+    }
+    void refreshCharts()
+  },
+)
+
+onBeforeUnmount(destroyResultCharts)
 
 onMounted(async () => {
   if (!props.resultId) {
