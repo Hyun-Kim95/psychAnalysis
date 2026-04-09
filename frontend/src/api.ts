@@ -1,9 +1,16 @@
 import axios from 'axios'
+import { locale } from './i18n'
 
 const baseURL = typeof import.meta.env.VITE_API_URL === 'string' && import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/\/$/, '') // 끝 슬래시 제거
   : ''
 if (baseURL) axios.defaults.baseURL = baseURL
+
+axios.interceptors.request.use((config) => {
+  config.headers = config.headers ?? {}
+  config.headers['Accept-Language'] = locale.value === 'en' ? 'en' : 'ko'
+  return config
+})
 
 /** 배포 환경에서 API 기준 URL (예: PDF 링크용) */
 export function getApiBaseUrl(): string {
@@ -112,6 +119,26 @@ export interface ResultViewData {
 export async function fetchResult(resultId: string) {
   const res = await axios.get<ApiResponse<ResultViewData>>(`/api/results/${resultId}`)
   return res.data.data
+}
+
+/** 일반 사용자 검사 결과 PDF (axios로 요청해 Accept-Language·lang 쿼리 반영) */
+export async function downloadUserResultPdf(resultId: string): Promise<void> {
+  const res = await axios.get<Blob>(`/api/results/${resultId}/pdf`, {
+    params: { lang: locale.value },
+    responseType: 'blob',
+  })
+  const disposition = res.headers['content-disposition']
+  let filename = locale.value === 'en' ? `result-${resultId}.pdf` : `검사결과-${resultId}.pdf`
+  if (typeof disposition === 'string') {
+    const match = disposition.match(/filename="?([^";\n]+)"?/)
+    if (match) filename = match[1].trim()
+  }
+  const url = window.URL.createObjectURL(res.data)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  window.URL.revokeObjectURL(url)
 }
 
 export interface AdminLoginResponse {
@@ -257,6 +284,10 @@ export interface AdminDashboardChartsPayload {
   chartTScore?: string | null
 }
 
+function pdfDownloadTimestamp(): string {
+  return new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-')
+}
+
 /** 관리자 리포트 - 대시보드 요약 PDF */
 export async function downloadAdminSummaryPdf(token: string, charts: AdminDashboardChartsPayload): Promise<void> {
   const res = await axios.post<Blob>('/api/admin/report/summary-pdf', charts, {
@@ -266,7 +297,9 @@ export async function downloadAdminSummaryPdf(token: string, charts: AdminDashbo
   const url = window.URL.createObjectURL(res.data)
   const a = document.createElement('a')
   a.href = url
-  a.download = `관리자리포트-요약-${new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-')}.pdf`
+  const ts = pdfDownloadTimestamp()
+  a.download =
+    locale.value === 'en' ? `admin-report-summary-${ts}.pdf` : `관리자리포트-요약-${ts}.pdf`
   a.click()
   window.URL.revokeObjectURL(url)
 }
@@ -280,7 +313,9 @@ export async function downloadAdminReferencePdf(token: string): Promise<void> {
   const url = window.URL.createObjectURL(res.data)
   const a = document.createElement('a')
   a.href = url
-  a.download = `관리자리포트-기준해석-${new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-')}.pdf`
+  const ts = pdfDownloadTimestamp()
+  a.download =
+    locale.value === 'en' ? `admin-report-reference-${ts}.pdf` : `관리자리포트-기준해석-${ts}.pdf`
   a.click()
   window.URL.revokeObjectURL(url)
 }
@@ -292,7 +327,7 @@ export async function downloadAdminResultPdf(token: string, resultId: string): P
     responseType: 'blob',
   })
   const disposition = res.headers['content-disposition']
-  let filename = `검사결과-${resultId}.pdf`
+  let filename = locale.value === 'en' ? `result-${resultId}.pdf` : `검사결과-${resultId}.pdf`
   if (typeof disposition === 'string') {
     const match = disposition.match(/filename="?([^";\n]+)"?/)
     if (match) filename = match[1].trim()

@@ -2,6 +2,8 @@ package com.tst.psychAnalysis.admin;
 
 import com.tst.psychAnalysis.assessment.Assessment;
 import com.tst.psychAnalysis.assessment.AssessmentRepository;
+import com.tst.psychAnalysis.assessment.LocalizationTexts;
+import com.tst.psychAnalysis.assessment.PdfLocaleStrings;
 import com.tst.psychAnalysis.response.ResponseSessionRepository;
 import com.tst.psychAnalysis.response.ResultRepository;
 import com.tst.psychAnalysis.response.ScaleGroupDto;
@@ -53,7 +55,8 @@ public class AdminReportPdfService {
      * 대시보드 요약(총 검사 수/결과 수 등)과 통계 그래프 데이터를 포함한 관리자용 PDF.
      * charts에는 프론트에서 캡처한 차트 이미지(Data URL)가 포함될 수 있습니다.
      */
-    public byte[] generateSummary(AdminDashboardChartsPayload charts) throws Exception {
+    public byte[] generateSummary(AdminDashboardChartsPayload charts, boolean english) throws Exception {
+        PdfLocaleStrings pdf = PdfLocaleStrings.of(english);
         long totalCompleted = responseSessionRepository.count();
         long totalResults = resultRepository.count();
         // 오늘 완료 수 (submittedAt 기준)
@@ -135,14 +138,14 @@ public class AdminReportPdfService {
             try {
                 cs.setNonStrokingColor(Color.BLACK);
                 // 상단 제목에서 부제목( - 대시보드 요약)과 생성일시는 표시하지 않습니다.
-                drawTextAt(cs, font, "관리자 리포트", margin, y, 18);
+                drawTextAt(cs, font, pdf.adminReportTitle(), margin, y, 18);
                 y -= 28;
 
                 // 1. 대시보드 요약 (테이블)
-                drawTextAt(cs, font, "■ 대시보드 요약", margin, y, 12);
+                drawTextAt(cs, font, pdf.adminDashboardSummary(), margin, y, 12);
                 y -= lineHeight + 4;
                 float[] summaryCols = {150, 150, 150};
-                String[] summaryHeader = {"총 검사 완료 수", "총 결과 리포트 수", "오늘 검사 완료 수"};
+                String[] summaryHeader = pdf.adminSummaryHeaders();
                 String[] summaryRow = {
                         String.valueOf(totalCompleted),
                         String.valueOf(totalResults),
@@ -154,37 +157,44 @@ public class AdminReportPdfService {
                 y -= 12;
 
                 // 2. 검사별 응답 수 (세로 방향: 검사명 | 응답 수, 긴 검사명은 줄바꿈)
-                drawTextAt(cs, font, "■ 검사별 응답 수", margin, y, 12);
+                drawTextAt(cs, font, pdf.adminResponsesByAssessment(), margin, y, 12);
                 y -= lineHeight + 4;
                 int assessmentCount = byAssessment.size();
                 if (assessmentCount > 0) {
                     float tableWidth = pageWidth - margin * 2;
                     float[] assessmentCols = {tableWidth * 0.8f, tableWidth * 0.2f};
-                    String[] assessmentHeader = {"검사명", "응답 수"};
+                    String[] assessmentHeader = {pdf.adminColAssessmentName(), pdf.adminColResponseCount()};
                     java.util.List<String[]> assessmentRows = new java.util.ArrayList<>();
                     for (java.util.Map.Entry<String, long[]> e : byAssessment.entrySet()) {
-                        String nameWrapped = wrapToSingleString(e.getKey(), 24);
-                        assessmentRows.add(new String[]{nameWrapped, e.getValue()[0] + "건"});
+                        String label = "(미지정)".equals(e.getKey())
+                                ? pdf.unspecifiedName()
+                                : LocalizationTexts.assessmentName(e.getKey(), english);
+                        String nameWrapped = wrapToSingleString(label, 24);
+                        assessmentRows.add(new String[]{nameWrapped, pdf.countSuffix(e.getValue()[0])});
                     }
                     y = drawTableWithMultilineCells(cs, font, margin, y, 22, 10, assessmentCols, assessmentHeader, assessmentRows);
                     y -= 12;
                 }
 
                 // 3. 검사별 평균 총점 (세로 방향: 검사명 | 평균 총점)
-                drawTextAt(cs, font, "■ 검사별 평균 총점", margin, y, 12);
+                drawTextAt(cs, font, pdf.adminAvgTotalByAssessment(), margin, y, 12);
                 y -= lineHeight + 4;
                 if (assessmentCount > 0) {
                     float tableWidth = pageWidth - margin * 2;
                     float[] assessmentCols2 = {tableWidth * 0.8f, tableWidth * 0.2f};
-                    String[] assessmentHeader2 = {"검사명", "평균 총점"};
+                    String[] assessmentHeader2 = {pdf.adminColAssessmentName(), pdf.adminColMeanTotal()};
                     java.util.List<String[]> assessmentAvgRows = new java.util.ArrayList<>();
+                    java.util.Locale numLoc = english ? java.util.Locale.US : java.util.Locale.KOREA;
                     for (java.util.Map.Entry<String, long[]> e : byAssessment.entrySet()) {
                         long count = e.getValue()[0];
                         long sumTimes100 = e.getValue()[1];
                         String avgStr = count > 0
-                                ? String.format(java.util.Locale.KOREA, "%.1f", (sumTimes100 / 100.0) / count)
+                                ? String.format(numLoc, "%.1f", (sumTimes100 / 100.0) / count)
                                 : "-";
-                        String nameWrapped = wrapToSingleString(e.getKey(), 24);
+                        String disp = "(미지정)".equals(e.getKey())
+                                ? pdf.unspecifiedName()
+                                : LocalizationTexts.assessmentName(e.getKey(), english);
+                        String nameWrapped = wrapToSingleString(disp, 24);
                         assessmentAvgRows.add(new String[]{nameWrapped, avgStr});
                     }
                     y = drawTableWithMultilineCells(cs, font, margin, y, 22, 10, assessmentCols2, assessmentHeader2, assessmentAvgRows);
@@ -192,7 +202,7 @@ public class AdminReportPdfService {
                 }
 
                 // 4. 척도별 신뢰도 (Cronbach α) (가로 방향 테이블)
-                drawTextAt(cs, font, "■ 척도별 신뢰도 (Cronbach α)", margin, y, 12);
+                drawTextAt(cs, font, pdf.adminReliabilityCronbach(), margin, y, 12);
                 y -= lineHeight + 4;
                 int relCount = reliability.size();
                 if (relCount > 0) {
@@ -205,7 +215,7 @@ public class AdminReportPdfService {
                     int idx = 0;
                     for (java.util.Map.Entry<String, Double> e : reliability.entrySet()) {
                         String alphaStr = e.getValue() != null
-                                ? String.format(java.util.Locale.KOREA, "%.2f", e.getValue())
+                                ? String.format(english ? java.util.Locale.US : java.util.Locale.KOREA, "%.2f", e.getValue())
                                 : "-";
                         relHeader[idx] = e.getKey();
                         relValues[idx] = alphaStr;
@@ -218,7 +228,7 @@ public class AdminReportPdfService {
                 }
 
                 // 5. 총 T점수 분포 (가로 방향 테이블)
-                drawTextAt(cs, font, "■ 총 T점수 분포", margin, y, 12);
+                drawTextAt(cs, font, pdf.adminTotalTScoreDistribution(), margin, y, 12);
                 y -= lineHeight + 4;
                 int binCount = bins.length;
                 if (binCount > 0) {
@@ -236,7 +246,7 @@ public class AdminReportPdfService {
                             label = bins[i] + "+";
                         }
                         histHeader[i] = label;
-                        histValues[i] = hist[i] + "건";
+                        histValues[i] = pdf.countSuffix(hist[i]);
                     }
                     java.util.List<String[]> histRows = new java.util.ArrayList<>();
                     histRows.add(histValues);
@@ -245,7 +255,7 @@ public class AdminReportPdfService {
                 }
 
                 cs.setNonStrokingColor(new Color(107, 114, 128));
-                drawTextAt(cs, font, "이 리포트는 관리자용 대시보드 요약 정보입니다. 세부 규준 및 해석은 별도 \"기준·해석 리포트\"를 참고하세요.", margin, y, 8);
+                drawTextAt(cs, font, pdf.adminSummaryFooterNote(), margin, y, 8);
                 y -= lineHeight + 6;
 
                 // 6. (선택) 프론트에서 캡처한 차트 이미지 삽입 (2×2 배치, 공간 부족 시 다음 페이지로)
@@ -267,8 +277,8 @@ public class AdminReportPdfService {
                         cs.setNonStrokingColor(Color.BLACK);
                         rowTop = y;
                     }
-                    float bottomLeft = drawChartImageIfPresent(document, cs, font, "검사별 응답 수", charts.getChartAssessment(), xLeft, rowTop, chartWidth, chartHeight);
-                    float bottomRight = drawChartImageIfPresent(document, cs, font, "검사별 평균 총점", charts.getChartAvgScore(), xRight, rowTop, chartWidth, chartHeight);
+                    float bottomLeft = drawChartImageIfPresent(document, cs, font, pdf.chartTitleResponsesByAssessment(), charts.getChartAssessment(), xLeft, rowTop, chartWidth, chartHeight);
+                    float bottomRight = drawChartImageIfPresent(document, cs, font, pdf.chartTitleMeanTotal(), charts.getChartAvgScore(), xRight, rowTop, chartWidth, chartHeight);
                     float rowBottom = Math.min(bottomLeft, bottomRight);
                     y = rowBottom - 24;
 
@@ -282,8 +292,8 @@ public class AdminReportPdfService {
                         cs.setNonStrokingColor(Color.BLACK);
                         rowTop = y;
                     }
-                    bottomLeft = drawChartImageIfPresent(document, cs, font, "척도별 신뢰도 (Cronbach α)", charts.getChartReliability(), xLeft, rowTop, chartWidth, chartHeight);
-                    bottomRight = drawChartImageIfPresent(document, cs, font, "총 T점수 분포", charts.getChartTScore(), xRight, rowTop, chartWidth, chartHeight);
+                    bottomLeft = drawChartImageIfPresent(document, cs, font, pdf.chartTitleReliability(), charts.getChartReliability(), xLeft, rowTop, chartWidth, chartHeight);
+                    bottomRight = drawChartImageIfPresent(document, cs, font, pdf.chartTitleTScoreDistribution(), charts.getChartTScore(), xRight, rowTop, chartWidth, chartHeight);
                     rowBottom = Math.min(bottomLeft, bottomRight);
                     y = rowBottom - 16;
                 }
@@ -300,8 +310,9 @@ public class AdminReportPdfService {
     /**
      * 검사별 규준(평균·표준편차) 및 해석만 포함한 관리자용 PDF.
      */
-    public byte[] generateReference() throws Exception {
-        List<AssessmentReferenceDto> referenceData = adminReferenceService.getReferenceData();
+    public byte[] generateReference(boolean english) throws Exception {
+        PdfLocaleStrings pdf = PdfLocaleStrings.of(english);
+        List<AssessmentReferenceDto> referenceData = adminReferenceService.getReferenceData(english);
 
         try (PDDocument document = new PDDocument();
              ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -325,16 +336,18 @@ public class AdminReportPdfService {
             try {
                 cs.setNonStrokingColor(Color.BLACK);
                 // 헤더에서 "- 기준·해석"과 생성일시는 제거하고, 제목만 굵게(폰트 크기로 강조)
-                drawTextAt(cs, font, "관리자 리포트", margin, y, 18);
+                drawTextAt(cs, font, pdf.adminReportTitle(), margin, y, 18);
                 y -= 26;
 
                 cs.setNonStrokingColor(new Color(55, 65, 81));
-                drawTextAt(cs, font, "검사별 기준점수 및 해석", margin, y, 13);
+                drawTextAt(cs, font, pdf.adminNormsAndInterpretationTitle(), margin, y, 13);
                 y -= lineHeight + 6;
                 cs.setNonStrokingColor(new Color(100, 116, 139));
-                for (String tDescLine : wrap("T점수란? 원점수를 표준화한 점수로 평균 50, 표준편차 10 기준입니다. 원점수가 규준 평균과 같을 때 T=50이며, 60 이상은 높은 편, 40 미만은 낮은 편으로 해석합니다. 아래 평균·표준편차는 원점수를 T점수로 해석할 때 참조하는 규준 값입니다.", 48)) {
-                    drawTextAt(cs, font, tDescLine, margin, y, 9);
-                    y -= lineHeight - 1;
+                for (String para : pdf.adminTScoreIntroParagraph()) {
+                    for (String tDescLine : wrap(para, 48)) {
+                        drawTextAt(cs, font, tDescLine, margin, y, 9);
+                        y -= lineHeight - 1;
+                    }
                 }
                 y -= 8;
                 cs.setNonStrokingColor(Color.BLACK);
@@ -355,12 +368,12 @@ public class AdminReportPdfService {
 
                     if (ref.norms() != null && !ref.norms().isEmpty()) {
                         cs.setNonStrokingColor(new Color(71, 85, 105));
-                        drawTextAt(cs, font, "기준점수(규준)", margin + 8, y, 10);
+                        drawTextAt(cs, font, pdf.adminNormSectionTitle(), margin + 8, y, 10);
                         y -= 8;
                         cs.setNonStrokingColor(Color.BLACK);
                         float totalWidth = pageWidth - margin * 2 - 16;
                         float[] normCols = {totalWidth * 0.5f, totalWidth * 0.25f, totalWidth * 0.25f};
-                        String[] normHeader = {"척도", "평균", "표준편차"};
+                        String[] normHeader = {pdf.adminNormHeaderScale(), pdf.adminNormHeaderMean(), pdf.adminNormHeaderSd()};
                         List<String[]> normRows;
                         Set<Integer> groupHeaderIndices = new HashSet<>();
                         if (ref.scaleGroups() != null && !ref.scaleGroups().isEmpty()) {
@@ -384,7 +397,7 @@ public class AdminReportPdfService {
                             AssessmentReferenceDto.NormRowDto totalNorm = findNormByCode(ref.norms(), "TOTAL");
                             if (totalNorm != null) {
                                 String label = totalNorm.scaleName() != null && !totalNorm.scaleName().isEmpty()
-                                        ? totalNorm.scaleName() : "총점";
+                                        ? totalNorm.scaleName() : pdf.adminTotalScoreFallback();
                                 normRows.add(new String[]{label, nullSafe(totalNorm.mean()), nullSafe(totalNorm.sd())});
                             }
                             float normRowHeight = 18;
@@ -434,7 +447,7 @@ public class AdminReportPdfService {
 
                     if (ref.interpretationGuide() != null && !ref.interpretationGuide().isEmpty()) {
                         cs.setNonStrokingColor(new Color(71, 85, 105));
-                        drawTextAt(cs, font, "해석 기준", margin + 8, y, 10);
+                        drawTextAt(cs, font, pdf.adminInterpretationGuideTitle(), margin + 8, y, 10);
                         y -= lineHeight;
                         cs.setNonStrokingColor(Color.BLACK);
 
@@ -487,7 +500,7 @@ public class AdminReportPdfService {
 
                 y -= 8;
                 cs.setNonStrokingColor(new Color(107, 114, 128));
-                drawTextAt(cs, font, "위 내용은 관리자 참고용입니다. 심리상담·임상적 판단이 필요할 경우 전문가와 상담하시기 바랍니다.", margin, y, 8);
+                drawTextAt(cs, font, pdf.adminReferenceFooter(), margin, y, 8);
             } finally {
                 cs.close();
             }

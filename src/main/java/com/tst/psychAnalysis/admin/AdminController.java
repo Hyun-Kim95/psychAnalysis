@@ -2,7 +2,9 @@ package com.tst.psychAnalysis.admin;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.tst.psychAnalysis.assessment.NeoScaleInterpretation;
+import com.tst.psychAnalysis.assessment.LocalizationTexts;
+import com.tst.psychAnalysis.assessment.NeoScaleGroupBuilder;
+import com.tst.psychAnalysis.assessment.PdfLocaleStrings;
 import com.tst.psychAnalysis.assessment.Scale;
 import com.tst.psychAnalysis.assessment.ScaleRepository;
 import com.tst.psychAnalysis.common.ApiResponse;
@@ -21,8 +23,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -96,8 +96,9 @@ public class AdminController {
     }
 
     @GetMapping("/access-logs")
-    public ApiResponse<List<AccessLogCount>> accessLogs(
+    public ApiResponse<List<AccessLogCountDto>> accessLogs(
             @RequestHeader("X-Admin-Token") String token,
+            @RequestHeader(value = "Accept-Language", required = false) String language,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false)
@@ -107,18 +108,31 @@ public class AdminController {
             throw new IllegalArgumentException("인증이 필요합니다.");
         }
 
+        boolean english = LocalizationTexts.isEnglish(language);
         LocalDate fromDate = from != null ? from : LocalDate.now().minusDays(30);
         LocalDate toDate = to != null ? to : LocalDate.now();
         List<AccessLogCount> logs = accessLogCountRepository
                 .findByLogDateBetweenOrderByLogDateDescClientIpMaskedAscEventTypeAsc(fromDate, toDate);
 
-        return ApiResponse.success(logs);
+        List<AccessLogCountDto> body = logs.stream()
+                .map(l -> new AccessLogCountDto(
+                        l.getId(),
+                        l.getClientIpMasked(),
+                        l.getLogDate(),
+                        LocalizationTexts.accessLogEventLabel(l.getEventType(), english),
+                        l.getCount()
+                ))
+                .toList();
+
+        return ApiResponse.success(body);
     }
 
     @GetMapping("/responses")
     public ApiResponse<List<AdminResponseSummary>> responses(
-            @RequestHeader("X-Admin-Token") String token
+            @RequestHeader("X-Admin-Token") String token,
+            @RequestHeader(value = "Accept-Language", required = false) String language
     ) {
+        boolean english = LocalizationTexts.isEnglish(language);
         if (!authService.isValidToken(token)) {
             throw new IllegalArgumentException("인증이 필요합니다.");
         }
@@ -131,7 +145,7 @@ public class AdminController {
                             session.getId(),
                             session.getSubmittedAt(),
                             session.getGroupCode(),
-                            assessmentName,
+                            LocalizationTexts.assessmentName(assessmentName, english),
                             result.getTotalRawScore(),
                             result.getTotalTScore()
                     );
@@ -144,8 +158,10 @@ public class AdminController {
     @GetMapping("/responses/{sessionId}")
     public ApiResponse<AdminResponseDetail> responseDetail(
             @RequestHeader("X-Admin-Token") String token,
-            @PathVariable("sessionId") UUID sessionId
+            @PathVariable("sessionId") UUID sessionId,
+            @RequestHeader(value = "Accept-Language", required = false) String language
     ) {
+        boolean english = LocalizationTexts.isEnglish(language);
         if (!authService.isValidToken(token)) {
             throw new IllegalArgumentException("인증이 필요합니다.");
         }
@@ -170,8 +186,11 @@ public class AdminController {
             if (!scales.isEmpty()) {
                 scaleOrder = scales.stream().map(Scale::getCode).toList();
                 scaleDisplayNames = scales.stream()
-                        .collect(Collectors.toMap(Scale::getCode, s -> s.getName() != null ? s.getName() : s.getCode()));
-                scaleGroups = buildScaleGroupsIfNeo(assessmentName, scaleOrder);
+                        .collect(Collectors.toMap(
+                                Scale::getCode,
+                                s -> LocalizationTexts.scaleName(s.getCode(), s.getName() != null ? s.getName() : s.getCode(), english)
+                        ));
+                scaleGroups = NeoScaleGroupBuilder.buildGroupsIfNeo(assessmentName, scaleOrder, english);
             }
         }
 
@@ -180,7 +199,7 @@ public class AdminController {
                 result.getId(),
                 session.getSubmittedAt(),
                 session.getGroupCode(),
-                assessmentName,
+                LocalizationTexts.assessmentName(assessmentName, english),
                 result.getTotalRawScore(),
                 result.getTotalTScore(),
                 scaleRaw,
@@ -197,52 +216,32 @@ public class AdminController {
     @GetMapping("/results/{resultId}/pdf")
     public ResponseEntity<byte[]> getResponseResultPdf(
             @RequestHeader("X-Admin-Token") String token,
-            @PathVariable("resultId") UUID resultId
+            @PathVariable("resultId") UUID resultId,
+            @RequestHeader(value = "Accept-Language", required = false) String language,
+            @RequestParam(value = "lang", required = false) String lang
     ) {
         if (!authService.isValidToken(token)) {
             throw new IllegalArgumentException("인증이 필요합니다.");
         }
+        boolean english = LocalizationTexts.englishFromAcceptLanguageOrLangParam(language, lang);
+
         Result result = resultRepository.findById(resultId)
                 .orElseThrow(() -> new IllegalArgumentException("결과를 찾을 수 없습니다."));
-        byte[] pdfBytes = resultPdfService.generate(result);
+        byte[] pdfBytes = resultPdfService.generate(result, english);
         String assessmentName = result.getResponseSession().getAssessment() != null
                 ? result.getResponseSession().getAssessment().getName()
-                : "검사";
+                : null;
         LocalDateTime at = result.getCreatedAt() != null ? result.getCreatedAt() : LocalDateTime.now();
         String dateTime = at.format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
-        String base = (assessmentName != null ? assessmentName.replace(" ", "") : "검사") + "결과";
+        String localized = LocalizationTexts.assessmentName(assessmentName, english);
+        PdfLocaleStrings pdf = PdfLocaleStrings.of(english);
+        String base = pdf.buildResultPdfBaseFileName(localized);
         String fileName = base + "-" + dateTime + ".pdf";
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_PDF);
         headers.setContentLength(pdfBytes.length);
         headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"");
         return ResponseEntity.ok().headers(headers).body(pdfBytes);
-    }
-
-    /** NEO 검사이고 하위척도(N1, E1 등)가 있으면 주척도별 그룹 목록 반환 (검사결과 화면과 동일) */
-    private List<ScaleGroupDto> buildScaleGroupsIfNeo(String assessmentName, List<String> scaleOrder) {
-        if (assessmentName == null || !assessmentName.contains("NEO") || scaleOrder == null || scaleOrder.isEmpty()) {
-            return List.of();
-        }
-        boolean hasFacets = scaleOrder.stream().anyMatch(NeoScaleInterpretation.FACET_ORDER::contains);
-        if (!hasFacets) return List.of();
-
-        Map<String, List<String>> byFactor = new LinkedHashMap<>();
-        for (String code : scaleOrder) {
-            if (code == null || code.length() < 2) continue;
-            String factor = code.substring(0, 1);
-            if (NeoScaleInterpretation.MAIN_FACTOR_NAMES.containsKey(factor)) {
-                byFactor.computeIfAbsent(factor, k -> new ArrayList<>()).add(code);
-            }
-        }
-        List<ScaleGroupDto> groups = new ArrayList<>();
-        for (String f : List.of("N", "E", "O", "A", "C")) {
-            if (byFactor.containsKey(f)) {
-                String label = NeoScaleInterpretation.MAIN_FACTOR_NAMES.get(f);
-                groups.add(new ScaleGroupDto(f + " (" + label + ")", byFactor.get(f)));
-            }
-        }
-        return groups;
     }
 
     private Map<String, Double> readMap(String json) {
@@ -283,24 +282,29 @@ public class AdminController {
 
     @GetMapping("/reference")
     public ApiResponse<List<AssessmentReferenceDto>> reference(
-            @RequestHeader("X-Admin-Token") String token
+            @RequestHeader("X-Admin-Token") String token,
+            @RequestHeader(value = "Accept-Language", required = false) String language
     ) {
+        boolean english = LocalizationTexts.isEnglish(language);
         if (!authService.isValidToken(token)) {
             throw new IllegalArgumentException("인증이 필요합니다.");
         }
-        return ApiResponse.success(adminReferenceService.getReferenceData());
+        return ApiResponse.success(adminReferenceService.getReferenceData(english));
     }
 
     @PostMapping("/report/summary-pdf")
     public ResponseEntity<byte[]> reportSummaryPdf(
             @RequestHeader("X-Admin-Token") String token,
+            @RequestHeader(value = "Accept-Language", required = false) String language,
             @RequestBody(required = false) AdminDashboardChartsPayload charts
     ) {
         if (!authService.isValidToken(token)) {
             throw new IllegalArgumentException("인증이 필요합니다.");
         }
+        boolean english = LocalizationTexts.isEnglish(language);
         try {
-            byte[] pdfBytes = adminReportPdfService.generateSummary(charts != null ? charts : new AdminDashboardChartsPayload());
+            byte[] pdfBytes = adminReportPdfService.generateSummary(
+                    charts != null ? charts : new AdminDashboardChartsPayload(), english);
             String fileName = "admin-report-summary-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")) + ".pdf";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_PDF);
@@ -313,12 +317,16 @@ public class AdminController {
     }
 
     @GetMapping("/report/reference-pdf")
-    public ResponseEntity<byte[]> reportReferencePdf(@RequestHeader("X-Admin-Token") String token) {
+    public ResponseEntity<byte[]> reportReferencePdf(
+            @RequestHeader("X-Admin-Token") String token,
+            @RequestHeader(value = "Accept-Language", required = false) String language
+    ) {
         if (!authService.isValidToken(token)) {
             throw new IllegalArgumentException("인증이 필요합니다.");
         }
+        boolean english = LocalizationTexts.isEnglish(language);
         try {
-            byte[] pdfBytes = adminReportPdfService.generateReference();
+            byte[] pdfBytes = adminReportPdfService.generateReference(english);
             String fileName = "admin-report-reference-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")) + ".pdf";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_PDF);

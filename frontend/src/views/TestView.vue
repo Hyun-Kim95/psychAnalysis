@@ -2,10 +2,9 @@
   <section class="test" v-if="items.length">
     <div class="card">
       <header class="test-header">
-        <h2>{{ assessmentName || '문항에 응답해 주세요' }}</h2>
+        <h2>{{ assessmentName || t('testFallbackTitle') }}</h2>
         <p class="test-sub">
-          총 {{ items.length }}문항 중
-          <strong>{{ currentIndex + 1 }}</strong>번 문항
+          {{ t('testProgress', { total: items.length, current: currentIndex + 1 }) }}
         </p>
         <div class="progress">
           <div class="progress-bar" :style="{ width: progressPercent + '%' }"></div>
@@ -13,7 +12,7 @@
       </header>
 
       <div class="test-body">
-        <p class="item-number">문항 {{ currentIndex + 1 }}</p>
+        <p class="item-number">{{ t('testItemNumber', { index: currentIndex + 1 }) }}</p>
         <p class="item-text">{{ currentItem.text }}</p>
 
         <div class="choices">
@@ -30,7 +29,7 @@
         </div>
 
         <p v-if="showValidationError" class="validation-error">
-          현재 문항에 대한 응답을 선택해 주세요.
+          {{ t('testAnswerRequired') }}
         </p>
       </div>
 
@@ -41,7 +40,7 @@
           class="secondary-btn"
           @click="goToIntro"
         >
-          처음으로
+          {{ t('testFirst') }}
         </button>
         <button
           v-else
@@ -49,7 +48,7 @@
           class="secondary-btn"
           @click="prevItem"
         >
-          이전
+          {{ t('testPrev') }}
         </button>
 
         <button
@@ -58,7 +57,7 @@
           class="primary-btn"
           @click="nextItem"
         >
-          다음
+          {{ t('testNext') }}
         </button>
         <button
           v-else
@@ -67,7 +66,7 @@
           :disabled="submitting"
           @click="submit"
         >
-          {{ submitting ? '제출 중...' : '제출하기' }}
+          {{ submitting ? t('testSubmitting') : t('testSubmit') }}
         </button>
       </footer>
     </div>
@@ -75,7 +74,7 @@
 
   <section v-else class="test">
     <div class="card">
-      <p>검사 문항을 불러오는 중입니다...</p>
+      <p>{{ t('loadingItems') }}</p>
     </div>
   </section>
 </template>
@@ -83,6 +82,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { fetchAssessment, fetchAssessmentItems, submitAnswers, type AssessmentItem } from '../api'
+import { useI18n } from '../i18n'
 
 const props = defineProps<{
   assessmentId: number | null
@@ -100,6 +100,7 @@ const currentIndex = ref(0)
 const answers = ref<Record<number, number>>({})
 const submitting = ref(false)
 const showValidationError = ref(false)
+const { t } = useI18n()
 
 const currentItem = computed(() => items.value[currentIndex.value])
 const isLast = computed(() => currentIndex.value === items.value.length - 1)

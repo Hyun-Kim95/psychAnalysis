@@ -37,5 +37,15 @@ public final class ScaleInterpretationFacade {
         return Map.of();
     }
 
+    public static String getReferenceDescription(String assessmentName) {
+        if (assessmentName == null) return "";
+        if (assessmentName.contains("BDI")) return BdiInterpretation.getReferenceDescription();
+        if (assessmentName.contains("BAI")) return BaiInterpretation.getReferenceDescription();
+        if (assessmentName.contains("TCI")) return TciScaleInterpretation.getReferenceDescription();
+        if (assessmentName.contains("NEO")) return NeoScaleInterpretation.getReferenceDescription();
+        if (assessmentName.contains("회복탄력성")) return ResilienceInterpretation.getReferenceDescription();
+        return "(해석 기준 없음)";
+    }
+
     private ScaleInterpretationFacade() {}
 }

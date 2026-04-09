@@ -1,7 +1,7 @@
 <template>
   <section class="intro">
     <div v-if="loading" class="card">
-      <p>검사 정보를 불러오는 중입니다...</p>
+      <p>{{ t('loadingAssessmentInfo') }}</p>
     </div>
 
     <div v-else-if="error" class="card card-error">
@@ -11,29 +11,29 @@
     <div v-else-if="assessment" class="card">
       <h2 class="intro-title">{{ assessment.name }}</h2>
       <p class="intro-desc">
-        {{ assessment.description || '온라인 심리 검사입니다.' }}
+        {{ assessment.description || t('defaultAssessmentDesc') }}
       </p>
 
       <template v-if="ready">
         <ul class="intro-list">
-          <li>문항 수: {{ itemCount }}문항 (예상 소요 시간: 약 {{ estimatedMinutes }}분)</li>
-          <li>응답은 익명으로 저장되며, 결과 해석은 참고용으로 활용해 주세요.</li>
-          <li>검사 도중 창을 닫으면 응답이 저장되지 않아 결과를 볼 수 없습니다. 여유 있는 시간에 진행해 주세요.</li>
+          <li>{{ t('introInfo1', { count: itemCount, minutes: estimatedMinutes }) }}</li>
+          <li>{{ t('introInfo2') }}</li>
+          <li>{{ t('introInfo3') }}</li>
         </ul>
 
         <div class="intro-actions">
           <button class="primary-btn" :disabled="starting" @click="start">
-            {{ starting ? '검사 세션 생성 중...' : '검사 시작하기' }}
+            {{ starting ? t('introSessionStarting') : t('introStart') }}
           </button>
           <button type="button" class="secondary-btn" @click="emit('back')">
-            목록으로
+            {{ t('listButton') }}
           </button>
         </div>
       </template>
       <template v-else>
-        <p class="intro-preparing">이 검사는 현재 준비 중입니다. 추후 제공될 예정입니다.</p>
+        <p class="intro-preparing">{{ t('introPreparing') }}</p>
         <button type="button" class="secondary-btn" @click="emit('back')">
-          목록으로
+          {{ t('listButton') }}
         </button>
       </template>
     </div>
@@ -43,6 +43,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { createSession, fetchAssessment, fetchAssessmentItems, type AssessmentSummary } from '../api'
+import { locale, useI18n } from '../i18n'
 
 const props = defineProps<{
   assessmentId: number
@@ -58,6 +59,7 @@ const itemCount = ref(0)
 const loading = ref(true)
 const error = ref<string | null>(null)
 const starting = ref(false)
+const { t } = useI18n()
 
 const ready = computed(() => itemCount.value > 0)
 const estimatedMinutes = computed(() => Math.max(1, Math.ceil(itemCount.value / 5)))
@@ -71,7 +73,7 @@ async function load() {
     const itemsData = await fetchAssessmentItems(props.assessmentId)
     itemCount.value = itemsData.items?.length ?? 0
   } catch (e) {
-    error.value = '검사 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'
+    error.value = t('introLoadError')
   } finally {
     loading.value = false
   }
@@ -79,6 +81,7 @@ async function load() {
 
 onMounted(load)
 watch(() => props.assessmentId, load)
+watch(locale, load)
 
 async function start() {
   if (!assessment.value || !ready.value) return
@@ -87,7 +90,7 @@ async function start() {
     const session = await createSession(assessment.value.id)
     emit('start', { assessmentId: assessment.value.id, sessionId: session.responseSessionId })
   } catch (e) {
-    error.value = '검사 세션을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.'
+    error.value = t('introCreateSessionError')
   } finally {
     starting.value = false
   }

@@ -1,7 +1,7 @@
 <template>
   <section class="admin-dashboard">
     <div v-if="loading" class="card">
-      <p>대시보드 정보를 불러오는 중입니다...</p>
+      <p>{{ t('loadingDashboard') }}</p>
     </div>
 
     <div v-else-if="error" class="card card-error">
@@ -9,8 +9,8 @@
     </div>
 
     <div v-else-if="data" class="card">
-      <h2 class="intro-title">관리자 대시보드</h2>
-      <p class="intro-desc">서비스 사용 현황 요약입니다.</p>
+      <h2 class="intro-title">{{ t('adminDashboardTitle') }}</h2>
+      <p class="intro-desc">{{ t('adminDashboardDesc') }}</p>
 
       <div class="result-actions" style="margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px;">
         <button
@@ -19,7 +19,7 @@
           @click="downloadAdminSummary"
           :disabled="summaryDownloading"
         >
-          대시보드 요약 PDF
+          {{ t('adminSummaryPdf') }}
         </button>
         <button
           type="button"
@@ -27,21 +27,21 @@
           @click="downloadAdminReference"
           :disabled="referenceDownloading"
         >
-          기준·해석 PDF
+          {{ t('adminReferencePdf') }}
         </button>
       </div>
 
       <div class="result-summary">
         <div class="summary-item">
-          <span class="summary-label">총 검사 완료 수</span>
+          <span class="summary-label">{{ t('adminTotalCompleted') }}</span>
           <span class="summary-value">{{ data.totalCompleted }}</span>
         </div>
         <div class="summary-item">
-          <span class="summary-label">총 결과 리포트 수</span>
+          <span class="summary-label">{{ t('adminTotalResults') }}</span>
           <span class="summary-value">{{ data.totalResults }}</span>
         </div>
         <div class="summary-item">
-          <span class="summary-label">오늘 검사 완료 수</span>
+          <span class="summary-label">{{ t('adminTodayCompleted') }}</span>
           <span class="summary-value">{{ data.todayCompleted }}</span>
         </div>
       </div>
@@ -52,47 +52,47 @@
           :key="code"
           class="summary-item"
         >
-          <span class="summary-label">신뢰도 α ({{ code }})</span>
+          <span class="summary-label">{{ t('adminReliability') }} ({{ code }})</span>
           <span class="summary-value">{{ alpha.toFixed(2) }}</span>
         </div>
       </div>
 
-      <h3 class="result-subtitle" style="margin-top: 20px;">통계 그래프</h3>
+      <h3 class="result-subtitle" style="margin-top: 20px;">{{ t('adminCharts') }}</h3>
       <div class="charts-grid">
         <div class="chart-wrap">
-          <h4 class="chart-title">검사별 응답 수</h4>
-          <div class="chart-container">
+          <h4 class="chart-title">{{ t('adminChartResponses') }}</h4>
+          <div class="chart-container chart-container--hbar">
             <canvas ref="chartAssessmentRef"></canvas>
           </div>
         </div>
         <div class="chart-wrap">
-          <h4 class="chart-title">검사별 평균 총점</h4>
-          <div class="chart-container">
+          <h4 class="chart-title">{{ t('adminChartAvgScore') }}</h4>
+          <div class="chart-container chart-container--hbar">
             <canvas ref="chartAvgScoreRef"></canvas>
           </div>
         </div>
         <div class="chart-wrap">
-          <h4 class="chart-title">척도별 신뢰도 (Cronbach α)</h4>
+          <h4 class="chart-title">{{ t('adminChartReliability') }}</h4>
           <div class="chart-container">
             <canvas ref="chartReliabilityRef"></canvas>
           </div>
         </div>
         <div class="chart-wrap">
-          <h4 class="chart-title">총 T점수 분포</h4>
+          <h4 class="chart-title">{{ t('adminChartTScoreDist') }}</h4>
           <div class="chart-container">
             <canvas ref="chartTScoreRef"></canvas>
           </div>
         </div>
       </div>
 
-      <h3 class="result-subtitle" style="margin-top: 20px;">검사별 기준점수 및 해석</h3>
+      <h3 class="result-subtitle" style="margin-top: 20px;">{{ t('adminReferenceTitle') }}</h3>
       <div class="ref-t-score-explanation">
-        <h4 class="ref-subtitle">T점수란?</h4>
-        <p>T점수는 원점수를 표준화한 점수로, <strong>평균 50, 표준편차 10</strong>을 기준으로 합니다. 규준(참조 집단)과 비교한 상대적 위치를 나타냅니다.</p>
-        <p>원점수가 규준 평균과 같을 때 T점수는 <strong>50</strong>이며, 60 이상이면 상대적으로 높은 편, 40 미만이면 낮은 편으로 해석합니다. 척도별 원점수는 이 규준(평균·표준편차)을 기준으로 T점수로 변환해 해석할 수 있습니다.</p>
-        <p class="ref-simple-notice">아래 기준점수 및 해석은 <strong>간단 검사</strong> 기준입니다. (상세 검사도 T점수·해석 기준은 동일합니다.)</p>
+        <h4 class="ref-subtitle">{{ t('tScoreTitle') }}</h4>
+        <p>{{ t('adminTScoreDesc1') }}</p>
+        <p>{{ t('adminTScoreDesc2') }}</p>
+        <p class="ref-simple-notice">{{ t('adminSimpleNotice') }}</p>
       </div>
-      <div v-if="referenceLoading" class="ref-loading">기준점수·해석 정보를 불러오는 중...</div>
+      <div v-if="referenceLoading" class="ref-loading">{{ t('adminReferenceLoading') }}</div>
       <div v-else class="reference-list">
         <details
           v-for="ref in referenceList"
@@ -101,20 +101,20 @@
         >
           <summary>{{ ref.assessmentName }}</summary>
           <div v-if="ref.norms.length" class="ref-norms">
-            <h4 class="ref-subtitle">기준점수(규준)</h4>
+            <h4 class="ref-subtitle">{{ t('normsTitle') }}</h4>
             <template v-if="ref.norms.length === 1">
               <p class="ref-norms-single">
                 {{ ref.norms[0].scaleName || ref.norms[0].scaleCode }}:
-                평균 {{ ref.norms[0].mean != null ? ref.norms[0].mean.toFixed(2) : '-' }},
-                표준편차 {{ ref.norms[0].sd != null ? ref.norms[0].sd.toFixed(2) : '-' }}
+                {{ t('mean') }} {{ ref.norms[0].mean != null ? ref.norms[0].mean.toFixed(2) : '-' }},
+                {{ t('sd') }} {{ ref.norms[0].sd != null ? ref.norms[0].sd.toFixed(2) : '-' }}
               </p>
             </template>
             <table v-else class="scale-table">
               <thead>
                 <tr>
-                  <th>척도</th>
-                  <th>평균</th>
-                  <th>표준편차</th>
+                  <th>{{ t('scale') }}</th>
+                  <th>{{ t('mean') }}</th>
+                  <th>{{ t('sd') }}</th>
                 </tr>
               </thead>
               <tbody>
@@ -130,7 +130,7 @@
                     </tr>
                   </template>
                   <tr v-if="refTotalNorm(ref)" :key="'total'">
-                    <td>{{ refTotalNorm(ref)!.scaleName || '총점' }}</td>
+                    <td>{{ refTotalNorm(ref)!.scaleName || t('total') }}</td>
                     <td>{{ refTotalNorm(ref)!.mean != null ? refTotalNorm(ref)!.mean!.toFixed(2) : '-' }}</td>
                     <td>{{ refTotalNorm(ref)!.sd != null ? refTotalNorm(ref)!.sd!.toFixed(2) : '-' }}</td>
                   </tr>
@@ -146,21 +146,21 @@
             </table>
           </div>
           <div v-if="ref.interpretationGuide" class="ref-guide">
-            <h4 class="ref-subtitle">해석 기준</h4>
+            <h4 class="ref-subtitle">{{ t('interpretationGuide') }}</h4>
             <pre class="ref-guide-text">{{ ref.interpretationGuide }}</pre>
           </div>
         </details>
-        <p v-if="!referenceList.length && !referenceLoading">표시할 검사 기준이 없습니다.</p>
+        <p v-if="!referenceList.length && !referenceLoading">{{ t('adminReferenceNone') }}</p>
       </div>
 
-      <h3 class="result-subtitle" style="margin-top: 20px;">접속 로그 (IP·날짜·이벤트별 횟수)</h3>
+      <h3 class="result-subtitle" style="margin-top: 20px;">{{ t('accessLogs') }}</h3>
       <table class="scale-table">
         <thead>
           <tr>
             <th>IP</th>
-            <th>날짜</th>
-            <th>이벤트</th>
-            <th>횟수</th>
+            <th>{{ t('date') }}</th>
+            <th>{{ t('event') }}</th>
+            <th>{{ t('count') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -171,7 +171,7 @@
             <td>{{ log.count }}</td>
           </tr>
           <tr v-if="!logs.length">
-            <td colspan="4">표시할 로그가 없습니다.</td>
+            <td colspan="4">{{ t('noLogs') }}</td>
           </tr>
         </tbody>
       </table>
@@ -182,7 +182,7 @@
           :disabled="logsPage <= 1"
           @click="logsPage > 1 && (logsPage = logsPage - 1)"
         >
-          이전
+          {{ t('prev') }}
         </button>
         <span class="pager-info">
           {{ logsPage }} / {{ logsTotalPages }}
@@ -193,19 +193,19 @@
           :disabled="logsPage >= logsTotalPages"
           @click="logsPage < logsTotalPages && (logsPage = logsPage + 1)"
         >
-          다음
+          {{ t('next') }}
         </button>
       </div>
 
-      <h3 class="result-subtitle" style="margin-top: 20px;">응답 목록</h3>
+      <h3 class="result-subtitle" style="margin-top: 20px;">{{ t('responsesTitle') }}</h3>
       <table class="scale-table">
         <thead>
           <tr>
-            <th>검사</th>
-            <th>응답 ID</th>
-            <th>제출 시각</th>
-            <th>총점</th>
-            <th>총 T점수</th>
+            <th>{{ t('assessment') }}</th>
+            <th>{{ t('responseId') }}</th>
+            <th>{{ t('submittedAt') }}</th>
+            <th>{{ t('totalRawScore') }}</th>
+            <th>{{ t('totalTScore') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -222,7 +222,7 @@
             <td>{{ r.totalTScore ?? '-' }}</td>
           </tr>
           <tr v-if="!responses.length">
-            <td colspan="5">표시할 응답이 없습니다.</td>
+            <td colspan="5">{{ t('noResponses') }}</td>
           </tr>
         </tbody>
       </table>
@@ -233,7 +233,7 @@
           :disabled="responsesPage <= 1"
           @click="responsesPage > 1 && (responsesPage = responsesPage - 1)"
         >
-          이전
+          {{ t('prev') }}
         </button>
         <span class="pager-info">
           {{ responsesPage }} / {{ responsesTotalPages }}
@@ -244,13 +244,13 @@
           :disabled="responsesPage >= responsesTotalPages"
           @click="responsesPage < responsesTotalPages && (responsesPage = responsesPage + 1)"
         >
-          다음
+          {{ t('next') }}
         </button>
       </div>
 
       <div v-if="selectedDetail" class="admin-detail-wrapper">
         <div class="result-detail-header">
-          <h3 class="result-subtitle">선택한 응답 상세</h3>
+          <h3 class="result-subtitle">{{ t('selectedResponseDetail') }}</h3>
           <button
             v-if="selectedDetail.resultId"
             type="button"
@@ -258,31 +258,31 @@
             :disabled="resultPdfDownloading"
             @click="downloadResultPdf"
           >
-            {{ resultPdfDownloading ? '다운로드 중…' : 'PDF 다운로드' }}
+            {{ resultPdfDownloading ? t('downloading') : t('downloadPdf') }}
           </button>
         </div>
         <div class="result-summary detail-result-summary">
           <div class="summary-item">
-            <span class="summary-label">검사</span>
+            <span class="summary-label">{{ t('assessment') }}</span>
             <span class="summary-value">{{ selectedDetail.assessmentName ?? '-' }}</span>
           </div>
           <div class="summary-item">
-            <span class="summary-label">응답 ID</span>
+            <span class="summary-label">{{ t('responseId') }}</span>
             <span class="summary-value">{{ selectedDetail.sessionId }}</span>
           </div>
           <div class="summary-item">
-            <span class="summary-label">제출 시각</span>
+            <span class="summary-label">{{ t('submittedAt') }}</span>
             <span class="summary-value">{{ formatDateTime(selectedDetail.submittedAt) }}</span>
           </div>
         </div>
 
-        <h3 class="result-subtitle">척도별 점수 (엑셀 규준 기준)</h3>
+        <h3 class="result-subtitle">{{ t('resultScaleScores') }}</h3>
         <table class="scale-table">
           <thead>
             <tr>
-              <th>척도</th>
-              <th>원점수</th>
-              <th>T 점수</th>
+              <th>{{ t('scale') }}</th>
+              <th>{{ t('rawScore') }}</th>
+              <th>{{ t('tScore') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -340,6 +340,8 @@ import {
   type NormRow,
   type AdminDashboardChartsPayload,
 } from '../api'
+import { useI18n } from '../i18n'
+import { formatScaleCodeForChart } from '../scaleLabels'
 
 const props = defineProps<{
   token: string | null
@@ -357,6 +359,7 @@ const referenceLoading = ref(false)
 const summaryDownloading = ref(false)
 const referenceDownloading = ref(false)
 const resultPdfDownloading = ref(false)
+const { t, locale } = useI18n()
 
 const pageSize = 10
 const logsPage = ref(1)
@@ -422,7 +425,7 @@ function updateCharts() {
   // 1. 검사별 응답 수
   const byAssessment: Record<string, number> = {}
   resp.forEach((r) => {
-    const name = r.assessmentName ?? '(미지정)'
+    const name = r.assessmentName ?? t('noAssignment')
     byAssessment[name] = (byAssessment[name] ?? 0) + 1
   })
   const assessmentLabels = Object.keys(byAssessment)
@@ -432,15 +435,25 @@ function updateCharts() {
     const chart = new Chart(chartAssessmentRef.value, {
       type: 'bar',
       data: {
-        labels: assessmentLabels.length ? assessmentLabels : ['(데이터 없음)'],
-        datasets: [{ label: '응답 수', data: assessmentData.length ? assessmentData : [0], backgroundColor: 'rgba(59, 130, 246, 0.7)' }],
+        labels: assessmentLabels.length ? assessmentLabels : [t('noData')],
+        datasets: [{ label: t('responseCount'), data: assessmentData.length ? assessmentData : [0], backgroundColor: 'rgba(59, 130, 246, 0.7)' }],
       },
       options: {
+        indexAxis: 'y',
         responsive: true,
         maintainAspectRatio: false,
+        layout: { padding: { left: 4, right: 20, top: 6, bottom: 6 } },
         plugins: { legend: { display: false } },
         scales: {
-          y: { beginAtZero: true, ticks: { stepSize: 1 } },
+          x: {
+            beginAtZero: true,
+            ticks: { precision: 0 },
+            grid: { color: 'rgba(0, 0, 0, 0.06)' },
+          },
+          y: {
+            grid: { display: false },
+            ticks: { font: { size: 10 }, autoSkip: false },
+          },
         },
       },
     })
@@ -451,7 +464,7 @@ function updateCharts() {
   // 2. 검사별 평균 총점
   const avgByAssessment: Record<string, { sum: number; n: number }> = {}
   resp.forEach((r) => {
-    const name = r.assessmentName ?? '(미지정)'
+    const name = r.assessmentName ?? t('noAssignment')
     if (!avgByAssessment[name]) avgByAssessment[name] = { sum: 0, n: 0 }
     const raw = r.totalRawScore
     if (raw != null && !Number.isNaN(raw)) {
@@ -467,17 +480,26 @@ function updateCharts() {
     const chart = new Chart(chartAvgScoreRef.value, {
       type: 'bar',
       data: {
-        labels: avgLabels.length ? avgLabels : ['(데이터 없음)'],
+        labels: avgLabels.length ? avgLabels : [t('noData')],
         datasets: [
-          { label: '평균 총점', data: avgData.length ? avgData : [0], backgroundColor: 'rgba(34, 197, 94, 0.7)' },
+          { label: t('averageTotalScore'), data: avgData.length ? avgData : [0], backgroundColor: 'rgba(34, 197, 94, 0.7)' },
         ],
       },
       options: {
+        indexAxis: 'y',
         responsive: true,
         maintainAspectRatio: false,
+        layout: { padding: { left: 4, right: 20, top: 6, bottom: 6 } },
         plugins: { legend: { display: false } },
         scales: {
-          y: { beginAtZero: true },
+          x: {
+            beginAtZero: true,
+            grid: { color: 'rgba(0, 0, 0, 0.06)' },
+          },
+          y: {
+            grid: { display: false },
+            ticks: { font: { size: 10 }, autoSkip: false },
+          },
         },
       },
     })
@@ -486,13 +508,14 @@ function updateCharts() {
   }
 
   // 3. 척도별 신뢰도 α
-  const relLabels = Object.keys(rel)
-  const relData = relLabels.map((k) => rel[k])
+  const relKeys = Object.keys(rel)
+  const relLabels = relKeys.map((k) => formatScaleCodeForChart(k, locale.value))
+  const relData = relKeys.map((k) => rel[k])
   if (chartReliabilityRef.value) {
     const chart = new Chart(chartReliabilityRef.value, {
       type: 'bar',
       data: {
-        labels: relLabels.length ? relLabels : ['(데이터 없음)'],
+        labels: relLabels.length ? relLabels : [t('noData')],
         datasets: [{ label: 'α', data: relData.length ? relData : [0], backgroundColor: 'rgba(168, 85, 247, 0.7)' }],
       },
       options: {
@@ -528,7 +551,7 @@ function updateCharts() {
       type: 'bar',
       data: {
         labels: binLabels,
-        datasets: [{ label: '응답 수', data: hist, backgroundColor: 'rgba(245, 158, 11, 0.7)' }],
+        datasets: [{ label: t('responseCount'), data: hist, backgroundColor: 'rgba(245, 158, 11, 0.7)' }],
       },
       options: {
         responsive: true,
@@ -558,7 +581,7 @@ async function loadReference() {
 
 async function load() {
   if (!props.token) {
-    error.value = '인증 토큰이 없습니다.'
+    error.value = t('tokenMissing')
     loading.value = false
     return
   }
@@ -575,7 +598,7 @@ async function load() {
     await nextTick()
     setTimeout(updateCharts, 150)
   } catch (e) {
-    error.value = '대시보드 정보를 불러오지 못했습니다.'
+    error.value = t('dashboardLoadError')
   } finally {
     loading.value = false
   }
@@ -590,6 +613,10 @@ watch(
     load()
   },
 )
+
+watch(locale, () => {
+  void nextTick().then(() => setTimeout(updateCharts, 150))
+})
 
 function formatDateTime(value: string | null) {
   if (value == null) return '-'
@@ -681,10 +708,18 @@ async function downloadResultPdf() {
   height: 200px;
   min-height: 200px;
 }
+/** 검사명 등 긴 가로 막대 라벨용 (PDF 캡처 시 잘림 완화) */
+.chart-container--hbar {
+  height: 280px;
+  min-height: 280px;
+}
 .chart-container canvas {
   display: block;
   width: 100% !important;
   height: 200px !important;
+}
+.chart-container--hbar canvas {
+  height: 280px !important;
 }
 .chart-title {
   font-size: 0.95rem;

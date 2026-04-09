@@ -1,9 +1,10 @@
 package com.tst.psychAnalysis.response;
 
-import com.tst.psychAnalysis.assessment.NeoScaleInterpretation;
+import com.tst.psychAnalysis.assessment.LocalizationTexts;
+import com.tst.psychAnalysis.assessment.NeoScaleGroupBuilder;
+import com.tst.psychAnalysis.assessment.PdfLocaleStrings;
 import com.tst.psychAnalysis.assessment.Scale;
 import com.tst.psychAnalysis.assessment.ScaleRepository;
-import com.tst.psychAnalysis.assessment.ScaleInterpretationFacade;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -16,11 +17,11 @@ import org.apache.pdfbox.util.Matrix;
 import org.springframework.stereotype.Service;
 
 import java.awt.*;
+import java.util.Locale;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -38,18 +39,23 @@ public class ResultPdfService {
         this.scaleRepository = scaleRepository;
     }
 
-    public byte[] generate(Result result) {
+    public byte[] generate(Result result, boolean english) {
+        PdfLocaleStrings pdf = PdfLocaleStrings.of(english);
         Long assessmentId = result.getResponseSession().getAssessment().getId();
         String assessmentName = result.getResponseSession().getAssessment().getName();
         List<Scale> scales = scaleRepository.findByAssessmentIdOrderByIdAsc(assessmentId);
         List<String> scaleOrder = scales.stream().map(Scale::getCode).toList();
         Map<String, String> displayNames = scales.stream()
-                .collect(Collectors.toMap(Scale::getCode, Scale::getName, (a, b) -> a));
+                .collect(Collectors.toMap(
+                        Scale::getCode,
+                        s -> LocalizationTexts.scaleName(s.getCode(), s.getName(), english),
+                        (a, b) -> a));
 
         Map<String, Double> scaleRaw = readMap(result.getScaleRawScoresJson());
         Map<String, Double> scaleT = readMap(result.getScaleTScoresJson());
-        Map<String, String> interpretations = ScaleInterpretationFacade.interpret(
-                assessmentName, result.getTotalRawScore(), scaleRaw, scaleT);
+        Map<String, String> interpretations = LocalizationTexts.interpret(
+                assessmentName, result.getTotalRawScore(), scaleRaw, scaleT, english);
+        String localizedAssessmentName = LocalizationTexts.assessmentName(assessmentName, english);
 
         try (PDDocument document = new PDDocument();
              ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -78,38 +84,38 @@ public class ResultPdfService {
             try {
                 // 제목
                 cs.setNonStrokingColor(Color.BLACK);
-                String title = (assessmentName != null ? assessmentName : "검사") + " 결과 리포트";
+                String title = pdf.resultReportTitle(localizedAssessmentName);
                 drawTextAt(cs, font, title, margin, y, 16);
                 y -= 28;
 
                 // 총점 요약
-                String summary = "총점: " + nullSafe(result.getTotalRawScore())
-                        + " / 총 T점수: " + nullSafeOneDecimal(result.getTotalTScore());
+                String summary = pdf.formatTotalSummary(nullSafe(result.getTotalRawScore()),
+                        nullSafeOneDecimal(result.getTotalTScore(), english));
                 drawTextAt(cs, font, summary, margin, y, 12);
                 y -= 20;
 
                 cs.setNonStrokingColor(Color.BLACK);
 
                 // T점수 그래프는 요약 직후·첫 페이지 상단에 두어 공간 확보 (NEO 등 척도 많을 때 행 높이 자동 축소)
-                List<String> codesInOrder = buildCodesInOrder(assessmentName, scaleOrder, scaleRaw, scaleT);
+                List<String> codesInOrder = buildCodesInOrder(assessmentName, scaleOrder, scaleRaw, scaleT, english);
                 if (!codesInOrder.isEmpty()) {
-                    y = drawScaleBarCharts(cs, font, marginLeft, marginRight, pageWidth, y, codesInOrder, displayNames, scaleT, minY);
+                    y = drawScaleBarCharts(cs, font, marginLeft, marginRight, pageWidth, y, codesInOrder, displayNames, scaleT, minY, pdf);
                     y -= 10;
                 }
 
                 // T점수 설명 (그래프 아래 한 줄)
                 cs.setNonStrokingColor(new Color(71, 85, 105));
-                drawTextAt(cs, font, "T점수: 평균 50·표준편차 10. 50 근처=평균, 60 이상=높은 편, 40 미만=낮은 편.", margin, y, 9);
+                drawTextAt(cs, font, pdf.tScoreExplainerLine(), margin, y, 9);
                 y -= 14;
                 cs.setNonStrokingColor(Color.BLACK);
 
                 // 척도별 점수 테이블. NEO는 주척도별 그룹 헤더 행 + 스타일 적용
                 float tableWidth = pageWidth - marginLeft - marginRight;
                 float[] colWidths = { tableWidth * 0.55f, tableWidth * 0.22f, tableWidth * 0.23f };
-                String[] headers = { "척도", "원점수", "T점수" };
+                String[] headers = { pdf.tableHeaderScale(), pdf.tableHeaderRaw(), pdf.tableHeaderT() };
                 java.util.List<String[]> rows = new java.util.ArrayList<>();
                 java.util.Set<Integer> groupHeaderIndices = new java.util.HashSet<>();
-                List<ScaleGroupDto> scaleGroups = buildScaleGroupsIfNeo(assessmentName, scaleOrder);
+                List<ScaleGroupDto> scaleGroups = NeoScaleGroupBuilder.buildGroupsIfNeo(assessmentName, scaleOrder, english);
                 if (!scaleGroups.isEmpty()) {
                     for (ScaleGroupDto group : scaleGroups) {
                         groupHeaderIndices.add(rows.size());
@@ -121,8 +127,8 @@ public class ResultPdfService {
                             String label = displayNames.getOrDefault(code, code);
                             rows.add(new String[]{
                                     label + " (" + code + ")",
-                                    raw != null ? nullSafeOneDecimal(raw) : "-",
-                                    t != null ? nullSafeOneDecimal(t) : "-"
+                                    raw != null ? nullSafeOneDecimal(raw, english) : "-",
+                                    t != null ? nullSafeOneDecimal(t, english) : "-"
                             });
                         }
                     }
@@ -134,8 +140,8 @@ public class ResultPdfService {
                         String label = displayNames.getOrDefault(code, code);
                         rows.add(new String[]{
                                 label + " (" + code + ")",
-                                raw != null ? nullSafeOneDecimal(raw) : "-",
-                                t != null ? nullSafeOneDecimal(t) : "-"
+                                raw != null ? nullSafeOneDecimal(raw, english) : "-",
+                                t != null ? nullSafeOneDecimal(t, english) : "-"
                         });
                     }
                 }
@@ -173,7 +179,7 @@ public class ResultPdfService {
                 }
                 y -= 16;
                 cs.setNonStrokingColor(new Color(55, 65, 81));
-                drawTextAt(cs, font, "■ 척도별 해석", margin, y, 11);
+                drawTextAt(cs, font, pdf.sectionScaleInterpretation(), margin, y, 11);
                 y -= 18;
 
                 cs.setNonStrokingColor(Color.BLACK);
@@ -183,7 +189,7 @@ public class ResultPdfService {
                 // 척도별 해석: 공간 부족 시 새 페이지 추가하며 모두 출력
                 if (!scaleGroups.isEmpty()) {
                     for (ScaleGroupDto group : scaleGroups) {
-                        holder.y = ensureSpace(document, font, margin, pageHeight, minY, holder, 20);
+                        holder.y = ensureSpace(document, font, margin, pageHeight, minY, holder, 20, pdf);
                         drawTextAt(holder.cs, font, "【" + group.groupLabel() + "】", margin, holder.y, 10);
                         holder.y -= lineHeight;
                         for (String code : group.scaleCodes()) {
@@ -191,7 +197,7 @@ public class ResultPdfService {
                             String interp = interpretations.get(code);
                             if (interp == null || interp.isEmpty()) continue;
                             int linesNeeded = 1 + wrap(interp, 42).size();
-                            holder.y = ensureSpace(document, font, margin, pageHeight, minY, holder, (int)(linesNeeded * (lineHeight - 2) + 8));
+                            holder.y = ensureSpace(document, font, margin, pageHeight, minY, holder, (int)(linesNeeded * (lineHeight - 2) + 8), pdf);
                             drawTextAt(holder.cs, font, label + " (" + code + "):", margin, holder.y, 9);
                             holder.y -= lineHeight;
                             for (String line : wrap(interp, 42)) {
@@ -208,7 +214,7 @@ public class ResultPdfService {
                         String interp = interpretations.get(code);
                         if (interp == null || interp.isEmpty()) continue;
                         int linesNeeded = 1 + wrap(interp, 42).size();
-                        holder.y = ensureSpace(document, font, margin, pageHeight, minY, holder, (int)(linesNeeded * (lineHeight - 2) + 8));
+                        holder.y = ensureSpace(document, font, margin, pageHeight, minY, holder, (int)(linesNeeded * (lineHeight - 2) + 8), pdf);
                         drawTextAt(holder.cs, font, label + " (" + code + "):", margin, holder.y, 9);
                         holder.y -= lineHeight;
                         for (String line : wrap(interp, 42)) {
@@ -221,8 +227,8 @@ public class ResultPdfService {
                 String totalInterp = interpretations.get("TOTAL");
                 if (totalInterp != null && !totalInterp.isEmpty()) {
                     int totalLines = 1 + wrap(totalInterp, 42).size();
-                    holder.y = ensureSpace(document, font, margin, pageHeight, minY, holder, (int)(totalLines * (lineHeight - 2) + 8));
-                    drawTextAt(holder.cs, font, "총점 (TOTAL):", margin, holder.y, 9);
+                    holder.y = ensureSpace(document, font, margin, pageHeight, minY, holder, (int)(totalLines * (lineHeight - 2) + 8), pdf);
+                    drawTextAt(holder.cs, font, pdf.totalScoreTotalLabel(), margin, holder.y, 9);
                     holder.y -= lineHeight;
                     for (String line : wrap(totalInterp, 42)) {
                         drawTextAt(holder.cs, font, "  " + line, margin, holder.y, 8);
@@ -231,9 +237,9 @@ public class ResultPdfService {
                     holder.y -= 4;
                 }
 
-                holder.y = ensureSpace(document, font, margin, pageHeight, minY, holder, 30);
+                holder.y = ensureSpace(document, font, margin, pageHeight, minY, holder, 30, pdf);
                 holder.y -= 8;
-                String note = "위 해석은 검사별 기준(총점 또는 T점수 구간)에 따른 참고 설명입니다. 심리상담·임상적 판단이 필요할 경우 전문가와 상담하시기 바랍니다.";
+                String note = pdf.interpretationFootnote();
                 holder.cs.setNonStrokingColor(new Color(107, 114, 128));
                 for (String line : wrap(note, 42)) {
                     drawTextAt(holder.cs, font, line, margin, holder.y, 9);
@@ -247,7 +253,7 @@ public class ResultPdfService {
             document.save(out);
             return out.toByteArray();
         } catch (Exception e) {
-            throw new IllegalStateException("PDF 생성 중 오류가 발생했습니다.", e);
+            throw new IllegalStateException(PdfLocaleStrings.of(english).pdfGenerationFailed(), e);
         }
     }
 
@@ -267,7 +273,7 @@ public class ResultPdfService {
     }
 
     private float ensureSpace(PDDocument document, PDFont font, float margin, float pageHeight, float minY,
-                              PageHolder h, float requiredHeight) throws Exception {
+                              PageHolder h, float requiredHeight, PdfLocaleStrings pdf) throws Exception {
         if (h.y - requiredHeight >= minY) return h.y;
         h.cs.close();
         PDPage newPage = new PDPage(PDRectangle.A4);
@@ -276,42 +282,17 @@ public class ResultPdfService {
         h.cs = new PDPageContentStream(document, newPage);
         h.y = pageHeight - margin;
         h.cs.setNonStrokingColor(new Color(55, 65, 81));
-        drawTextAt(h.cs, font, "■ 척도별 해석 (계속)", margin, h.y, 11);
+        drawTextAt(h.cs, font, pdf.sectionScaleInterpretationContinued(), margin, h.y, 11);
         h.y -= 18;
         h.cs.setNonStrokingColor(Color.BLACK);
         return h.y;
     }
 
-    /** NEO 검사이고 하위척도(N1, E1 등)가 있으면 주척도별 그룹 목록 반환 */
-    private List<ScaleGroupDto> buildScaleGroupsIfNeo(String assessmentName, List<String> scaleOrder) {
-        if (assessmentName == null || !assessmentName.contains("NEO") || scaleOrder == null || scaleOrder.isEmpty()) {
-            return List.of();
-        }
-        boolean hasFacets = scaleOrder.stream().anyMatch(NeoScaleInterpretation.FACET_ORDER::contains);
-        if (!hasFacets) return List.of();
-
-        Map<String, List<String>> byFactor = new LinkedHashMap<>();
-        for (String code : scaleOrder) {
-            if (code == null || code.length() < 2) continue;
-            String factor = code.substring(0, 1);
-            if (NeoScaleInterpretation.MAIN_FACTOR_NAMES.containsKey(factor)) {
-                byFactor.computeIfAbsent(factor, k -> new ArrayList<>()).add(code);
-            }
-        }
-        List<ScaleGroupDto> groups = new ArrayList<>();
-        for (String f : List.of("N", "E", "O", "A", "C")) {
-            if (byFactor.containsKey(f)) {
-                String label = NeoScaleInterpretation.MAIN_FACTOR_NAMES.get(f);
-                groups.add(new ScaleGroupDto(f + " (" + label + ")", byFactor.get(f)));
-            }
-        }
-        return groups;
-    }
-
     /** 테이블·화면과 동일한 순서로, 원점수 또는 T점수가 있는 척도 코드만 나열 */
     private List<String> buildCodesInOrder(String assessmentName, List<String> scaleOrder,
-                                            Map<String, Double> scaleRaw, Map<String, Double> scaleT) {
-        List<ScaleGroupDto> scaleGroups = buildScaleGroupsIfNeo(assessmentName, scaleOrder);
+                                            Map<String, Double> scaleRaw, Map<String, Double> scaleT,
+                                            boolean english) {
+        List<ScaleGroupDto> scaleGroups = NeoScaleGroupBuilder.buildGroupsIfNeo(assessmentName, scaleOrder, english);
         List<String> out = new ArrayList<>();
         if (!scaleGroups.isEmpty()) {
             for (ScaleGroupDto group : scaleGroups) {
@@ -336,13 +317,13 @@ public class ResultPdfService {
     private float drawScaleBarCharts(PDPageContentStream cs, PDFont font,
                                      float marginL, float marginR, float pageWidth, float y,
                                      List<String> codes, Map<String, String> displayNames,
-                                     Map<String, Double> scaleT, float minAllowedY) throws Exception {
+                                     Map<String, Double> scaleT, float minAllowedY,
+                                     PdfLocaleStrings pdf) throws Exception {
         cs.setNonStrokingColor(new Color(55, 65, 81));
-        drawTextAt(cs, font, "■ 척도별 T점수 그래프", marginL, y, 11);
+        drawTextAt(cs, font, pdf.sectionTScoreBarCharts(), marginL, y, 11);
         y -= 16;
         cs.setNonStrokingColor(new Color(100, 116, 139));
-        java.util.List<String> hintLines = wrap(
-                "막대 색(T): 파란·회색·주황(40/60 기준). 세로선 T=50. 원점수는 아래 표.", 58);
+        java.util.List<String> hintLines = wrap(pdf.tScoreBarChartHint(), 58);
         for (String line : hintLines) {
             drawTextAt(cs, font, line, marginL, y, 8);
             y -= 10;
@@ -367,7 +348,7 @@ public class ResultPdfService {
         float cornerR = 6f;
 
         return drawOneBarChartPanel(cs, font, marginL, totalW, y, codes, displayNames, scaleT, true,
-                0, 0, 0, 0, labelCol, rowH, labelFont, axisFont, boxPad, cornerR);
+                0, 0, 0, 0, labelCol, rowH, labelFont, axisFont, boxPad, cornerR, pdf);
     }
 
     /**
@@ -379,7 +360,8 @@ public class ResultPdfService {
                                        Map<String, Double> values, boolean isTScore,
                                        double minT, double maxT, double minRaw, double maxRaw,
                                        float labelCol, float rowH, float labelFont, float axisFont,
-                                       float boxPad, float cornerR) throws Exception {
+                                       float boxPad, float cornerR,
+                                       PdfLocaleStrings pdf) throws Exception {
         float innerRightPad = 14;
         float plotW = Math.max(100, totalW - labelCol - innerRightPad);
         float plotX = originX + labelCol;
@@ -411,7 +393,8 @@ public class ResultPdfService {
         }
 
         float panelTopY = y + 16;
-        String panelTitle = isTScore ? "T 점수" : "원점수";
+        Locale tickLocale = pdf.isEnglish() ? Locale.US : Locale.KOREA;
+        String panelTitle = isTScore ? pdf.panelTScoreTitle() : pdf.panelRawScoreTitle();
         cs.setNonStrokingColor(new Color(30, 64, 175));
         drawTextAt(cs, font, panelTitle, originX + boxPad * 0.5f, y, 11);
         cs.setNonStrokingColor(Color.BLACK);
@@ -489,8 +472,8 @@ public class ResultPdfService {
         for (double t = axisMin; t <= axisMax + 1e-6; t += tickStep) {
             float gx = valueToPlotX(t, axisMin, axisMax, plotX, plotW);
             String lab = isTScore
-                    ? String.format(java.util.Locale.KOREA, "%.0f", t)
-                    : (tickStep >= 1 ? String.format(java.util.Locale.KOREA, "%.0f", t) : String.format(java.util.Locale.KOREA, "%.1f", t));
+                    ? String.format(tickLocale, "%.0f", t)
+                    : (tickStep >= 1 ? String.format(tickLocale, "%.0f", t) : String.format(tickLocale, "%.1f", t));
             drawTextRotatedCcW(cs, font, lab, axisFont, gx, tickLabelY, -42);
         }
         cs.setNonStrokingColor(Color.BLACK);
@@ -499,14 +482,14 @@ public class ResultPdfService {
         float axisCaptionY = tickLabelY - capDrop;
         cs.setNonStrokingColor(new Color(100, 116, 139));
         if (isTScore) {
-            String cap = String.format(java.util.Locale.KOREA, "T점수 (규준 평균 50). 표시 범위 %.0f ~ %.0f", axisMin, axisMax);
+            String cap = pdf.axisCaptionTScore(axisMin, axisMax);
             int wrapLen = rowH < 13.5f ? 52 : 58;
             for (String line : wrap(cap, wrapLen)) {
                 drawTextAt(cs, font, line, plotX, axisCaptionY, axisFont);
                 axisCaptionY -= rowH < 13.5f ? 9 : 10;
             }
         } else {
-            String cap = String.format(java.util.Locale.KOREA, "원점수 (0 ~ %.1f)", axisMax);
+            String cap = pdf.axisCaptionRaw(axisMax);
             drawTextAt(cs, font, cap, plotX, axisCaptionY, axisFont);
             axisCaptionY -= 10;
         }
@@ -616,8 +599,11 @@ public class ResultPdfService {
         return value == null ? "-" : value.toString();
     }
 
-    private String nullSafeOneDecimal(Double value) {
-        return value == null ? "-" : String.format(java.util.Locale.KOREA, "%.1f", value);
+    private String nullSafeOneDecimal(Double value, boolean english) {
+        if (value == null) {
+            return "-";
+        }
+        return String.format(english ? Locale.US : Locale.KOREA, "%.1f", value);
     }
 
     private void drawTextAt(PDPageContentStream cs, PDFont font, String text, float x, float baselineY, float fontSize) throws Exception {
