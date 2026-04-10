@@ -1,5 +1,5 @@
 <template>
-  <section class="intro">
+  <section class="intro pa-intro">
     <div v-if="loading" class="card">
       <p>{{ t('loadingAssessmentInfo') }}</p>
     </div>

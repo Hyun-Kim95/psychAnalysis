@@ -4,6 +4,7 @@ import com.tst.psychAnalysis.assessment.Assessment;
 import com.tst.psychAnalysis.assessment.AssessmentRepository;
 import com.tst.psychAnalysis.assessment.LocalizationTexts;
 import com.tst.psychAnalysis.assessment.PdfLocaleStrings;
+import com.tst.psychAnalysis.response.ResponseSession;
 import com.tst.psychAnalysis.response.ResponseSessionRepository;
 import com.tst.psychAnalysis.response.ResultRepository;
 import com.tst.psychAnalysis.response.ScaleGroupDto;
@@ -18,15 +19,19 @@ import org.springframework.stereotype.Service;
 
 import java.awt.*;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -37,18 +42,18 @@ public class AdminReportPdfService {
     private final ResultRepository resultRepository;
     private final AssessmentRepository assessmentRepository;
     private final AdminReferenceService adminReferenceService;
-    private final StatisticsService statisticsService;
+
+    private static final int ADMIN_PDF_DAILY_WINDOW = 30;
+    private static final ZoneId ADMIN_PDF_ZONE = ZoneId.of("Asia/Seoul");
 
     public AdminReportPdfService(ResponseSessionRepository responseSessionRepository,
                                  ResultRepository resultRepository,
                                  AssessmentRepository assessmentRepository,
-                                 AdminReferenceService adminReferenceService,
-                                 StatisticsService statisticsService) {
+                                 AdminReferenceService adminReferenceService) {
         this.responseSessionRepository = responseSessionRepository;
         this.resultRepository = resultRepository;
         this.assessmentRepository = assessmentRepository;
         this.adminReferenceService = adminReferenceService;
-        this.statisticsService = statisticsService;
     }
 
     /**
@@ -89,8 +94,26 @@ public class AdminReportPdfService {
             }
         }
 
-        // 2) 척도별 신뢰도 (Cronbach α)
-        java.util.Map<String, Double> reliability = statisticsService.computeCronbachAlphaByScale();
+        // 2) 최근 30일 일별 완료 건수 (대시보드 제출 추이와 동일, Asia/Seoul)
+        LocalDate todayZ = LocalDate.now(ADMIN_PDF_ZONE);
+        List<LocalDate> dayKeys = new ArrayList<>();
+        for (int i = ADMIN_PDF_DAILY_WINDOW - 1; i >= 0; i--) {
+            dayKeys.add(todayZ.minusDays(i));
+        }
+        Map<LocalDate, Integer> dailyCompleted = new LinkedHashMap<>();
+        for (LocalDate d : dayKeys) {
+            dailyCompleted.put(d, 0);
+        }
+        for (ResponseSession s : responseSessionRepository.findAll()) {
+            if (s.getSubmittedAt() == null) {
+                continue;
+            }
+            LocalDate d = s.getSubmittedAt().atZone(ADMIN_PDF_ZONE).toLocalDate();
+            if (dailyCompleted.containsKey(d)) {
+                dailyCompleted.merge(d, 1, Integer::sum);
+            }
+        }
+        DateTimeFormatter dayFmt = DateTimeFormatter.ISO_LOCAL_DATE;
 
         // 3) 총 T점수 분포 (히스토그램)
         java.util.List<Double> tScores = new java.util.ArrayList<>();
@@ -201,31 +224,29 @@ public class AdminReportPdfService {
                     y -= 12;
                 }
 
-                // 4. 척도별 신뢰도 (Cronbach α) (가로 방향 테이블)
-                drawTextAt(cs, font, pdf.adminReliabilityCronbach(), margin, y, 12);
-                y -= lineHeight + 4;
-                int relCount = reliability.size();
-                if (relCount > 0) {
-                    float tableWidth = pageWidth - margin * 2;
-                    float colWidth = tableWidth / relCount;
-                    float[] relCols = new float[relCount];
-                    for (int i = 0; i < relCount; i++) relCols[i] = colWidth;
-                    String[] relHeader = new String[relCount];
-                    String[] relValues = new String[relCount];
-                    int idx = 0;
-                    for (java.util.Map.Entry<String, Double> e : reliability.entrySet()) {
-                        String alphaStr = e.getValue() != null
-                                ? String.format(english ? java.util.Locale.US : java.util.Locale.KOREA, "%.2f", e.getValue())
-                                : "-";
-                        relHeader[idx] = e.getKey();
-                        relValues[idx] = alphaStr;
-                        idx++;
-                    }
-                    java.util.List<String[]> relRows = new java.util.ArrayList<>();
-                    relRows.add(relValues);
-                    y = drawTable(cs, font, margin, y, 18, relCols, relHeader, relRows);
-                    y -= 12;
+                // 4. 일별 제출 추이 (최근 30일, 세로 표: 날짜 | 완료 건수)
+                float dailyRowH = 15f;
+                float dailyBlockH = lineHeight + 4 + dailyRowH * (1 + dayKeys.size()) + 20;
+                if (y < margin + dailyBlockH) {
+                    cs.close();
+                    page = new PDPage(pageSize);
+                    document.addPage(page);
+                    cs = new PDPageContentStream(document, page);
+                    y = pageHeight - margin;
+                    cs.setNonStrokingColor(Color.BLACK);
                 }
+                drawTextAt(cs, font, pdf.adminDailySubmissionsByDaySection(), margin, y, 12);
+                y -= lineHeight + 4;
+                float tableWidthDaily = pageWidth - margin * 2;
+                float[] dailyCols = {tableWidthDaily * 0.42f, tableWidthDaily * 0.58f};
+                String[] dailyHeader = {pdf.adminColCalendarDate(), pdf.adminColCompletedThatDay()};
+                List<String[]> dailyRows = new ArrayList<>();
+                for (LocalDate d : dayKeys) {
+                    int n = dailyCompleted.getOrDefault(d, 0);
+                    dailyRows.add(new String[]{d.format(dayFmt), pdf.countSuffix(n)});
+                }
+                y = drawTable(cs, font, margin, y, dailyRowH, dailyCols, dailyHeader, dailyRows);
+                y -= 12;
 
                 // 5. 총 T점수 분포 (가로 방향 테이블)
                 drawTextAt(cs, font, pdf.adminTotalTScoreDistribution(), margin, y, 12);
@@ -292,7 +313,7 @@ public class AdminReportPdfService {
                         cs.setNonStrokingColor(Color.BLACK);
                         rowTop = y;
                     }
-                    bottomLeft = drawChartImageIfPresent(document, cs, font, pdf.chartTitleReliability(), charts.getChartReliability(), xLeft, rowTop, chartWidth, chartHeight);
+                    bottomLeft = drawChartImageIfPresent(document, cs, font, pdf.chartTitleDailySubmissions(), charts.getChartDailySubmissions(), xLeft, rowTop, chartWidth, chartHeight);
                     bottomRight = drawChartImageIfPresent(document, cs, font, pdf.chartTitleTScoreDistribution(), charts.getChartTScore(), xRight, rowTop, chartWidth, chartHeight);
                     rowBottom = Math.min(bottomLeft, bottomRight);
                     y = rowBottom - 16;
@@ -328,6 +349,8 @@ public class AdminReportPdfService {
             float pageWidth = pageSize.getWidth();
             float pageHeight = pageSize.getHeight();
             float y = pageHeight - margin;
+            float introMaxW = pageWidth - margin * 2f - 8f;
+            float interpBodyMaxW = pageWidth - margin * 2f - 16f - 8f;
 
             PDPage page = new PDPage(pageSize);
             document.addPage(page);
@@ -343,9 +366,10 @@ public class AdminReportPdfService {
                 drawTextAt(cs, font, pdf.adminNormsAndInterpretationTitle(), margin, y, 13);
                 y -= lineHeight + 6;
                 cs.setNonStrokingColor(new Color(100, 116, 139));
+                float introFont = 9f;
                 for (String para : pdf.adminTScoreIntroParagraph()) {
-                    for (String tDescLine : wrap(para, 48)) {
-                        drawTextAt(cs, font, tDescLine, margin, y, 9);
+                    for (String tDescLine : wrapByPdfWidth(font, para, introFont, introMaxW)) {
+                        drawTextAt(cs, font, tDescLine, margin, y, introFont);
                         y -= lineHeight - 1;
                     }
                 }
@@ -478,8 +502,9 @@ public class AdminReportPdfService {
                                 cs.setNonStrokingColor(Color.BLACK);
                                 y -= lineHeight;
                             } else {
-                                // "낮음:", "평균:", "높음:" 설명 라인들
-                                for (String line : wrap(trimmed, 48)) {
+                                // "낮음:", "평균:", "높음:" 설명 라인들 — 가용 너비 기준 줄바꿈
+                                float guideFont = 9f;
+                                for (String line : wrapByPdfWidth(font, trimmed, guideFont, interpBodyMaxW)) {
                                     if (y < margin + 40) {
                                         cs.close();
                                         page = new PDPage(pageSize);
@@ -489,7 +514,7 @@ public class AdminReportPdfService {
                                         cs.setNonStrokingColor(Color.BLACK);
                                     }
                                     // 척도 제목보다 한 단계 더 들여쓰기
-                                    drawTextAt(cs, font, line, margin + 16, y, 9);
+                                    drawTextAt(cs, font, line, margin + 16, y, guideFont);
                                     y -= lineHeight - 2;
                                 }
                             }
@@ -707,6 +732,60 @@ public class AdminReportPdfService {
         return null;
     }
 
+    /**
+     * 페이지 가용 너비에 맞춰 줄바꿈({@link PDFont#getStringWidth} 기준).
+     */
+    private static List<String> wrapByPdfWidth(PDFont font, String text, float fontSize, float maxContentWidthPt)
+            throws IOException {
+        List<String> out = new ArrayList<>();
+        if (text == null || text.isEmpty()) {
+            return out;
+        }
+        final int len = text.length();
+        int i = 0;
+        while (i < len) {
+            while (i < len && text.charAt(i) == ' ') {
+                i++;
+            }
+            if (i >= len) {
+                break;
+            }
+            int j = i + 1;
+            while (j <= len) {
+                float w = font.getStringWidth(text.substring(i, j)) / 1000f * fontSize;
+                if (w > maxContentWidthPt) {
+                    break;
+                }
+                j++;
+            }
+            int end = j - 1;
+            if (end <= i) {
+                end = i + 1;
+            }
+            if (end < len) {
+                int lastGood = -1;
+                for (int k = end - 1; k > i; k--) {
+                    char c = text.charAt(k);
+                    if (c == ' ' || c == '.' || c == '。' || c == '·' || c == ')' || c == ','
+                            || c == '、' || c == ';' || c == '；' || c == ':' || c == '：') {
+                        lastGood = k;
+                        break;
+                    }
+                }
+                if (lastGood > i) {
+                    end = lastGood + 1;
+                }
+            }
+            String piece = text.substring(i, end);
+            if (!piece.isBlank()) {
+                out.add(piece.stripTrailing());
+            }
+            i = end;
+        }
+        return out;
+    }
+
+    /** 요약 PDF 테이블 셀용(좁은 폭) — 글자 수 단위 분할 */
     private static List<String> wrap(String text, int maxCharsPerLine) {
         if (text == null || text.isEmpty()) return List.of();
         List<String> lines = new java.util.ArrayList<>();

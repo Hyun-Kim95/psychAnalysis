@@ -30,10 +30,17 @@ public final class LocalizationTexts {
     private static final Map<Integer, String> BDI_ITEMS_EN = buildBdiItemsEn();
     private static final Map<Integer, String> BAI_ITEMS_EN = buildBaiItemsEn();
     private static final Map<String, String> TCI_SHORT_ITEMS_EN = buildTciShortItemsEn();
-    private static final Map<String, String> NEO_SHORT_ITEMS_EN = buildNeoShortItemsEn();
     private static final Map<String, String> TCI_DETAIL_ITEMS_EN = buildTciDetailItemsEn();
     private static final Map<String, String> NEO_DETAIL_ITEMS_EN = buildNeoDetailItemsEn();
-    private static final Map<Integer, String> RESILIENCE_ITEMS_EN = buildResilienceItemsEn();
+    private static final Map<String, String> NEO_SHORT_ITEMS_EN = buildNeoShortItemsEn();
+
+    /** KRQ-53 한글 문항 순서와 동일 (Krq53MigrationRunner#getKrq53Texts) */
+    private static final String[] KRQ53_ITEMS_EN = buildKrq53ItemsEn();
+
+    /** 회복탄력성 검사(간단) 27문항 → KRQ53_ITEMS_EN 인덱스 (Krq53MigrationRunner와 동일) */
+    private static final int[] KRQ_SHORT_TO_FULL_INDEX = {
+            0, 1, 2, 6, 7, 8, 12, 13, 14, 18, 19, 20, 24, 25, 26, 30, 31, 32, 36, 37, 38, 42, 43, 44, 47, 48, 49
+    };
 
     private static Map<String, String> buildScaleNamesEn() {
         Map<String, String> m = new LinkedHashMap<>();
@@ -210,13 +217,16 @@ public final class LocalizationTexts {
             return TCI_DETAIL_ITEMS_EN.getOrDefault(scaleCode + "_" + itemNumber, originalText);
         }
         if (assessmentName.equals("NEO 성격검사")) {
-            return NEO_SHORT_ITEMS_EN.getOrDefault(scaleCode + "_" + itemNumber, originalText);
+            return NEO_SHORT_ITEMS_EN.getOrDefault(scaleCode + "_1", originalText);
         }
         if (assessmentName.equals("NEO 성격검사 (상세)")) {
-            return NEO_DETAIL_ITEMS_EN.getOrDefault(scaleCode + "_" + itemNumber, originalText);
+            // DB: 하위척도 코드 N1..C6, 문항은 척도당 2개 → 키 N1_1, N1_2 (글로벌 item_number 아님)
+            int withinFacet = ((itemNumber - 1) % 2) + 1;
+            String neoKey = scaleCode + "_" + withinFacet;
+            return NEO_DETAIL_ITEMS_EN.getOrDefault(neoKey, originalText);
         }
         if (assessmentName.contains("회복탄력성")) {
-            return RESILIENCE_ITEMS_EN.getOrDefault(itemNumber, originalText);
+            return resilienceItemEnglish(assessmentName, itemNumber, originalText);
         }
         return originalText;
     }
@@ -412,59 +422,89 @@ public final class LocalizationTexts {
         return m;
     }
 
+    /** NEO 간단(29문항): 하위척도당 1문항 → 상세 맵의 {@code Nx_1} 문장 재사용 */
     private static Map<String, String> buildNeoShortItemsEn() {
         Map<String, String> m = new LinkedHashMap<>();
-        m.put("N_1", "I tend to worry first that things may go wrong.");
-        m.put("N_2", "When tasks pile up or deadlines approach, I easily feel tense or anxious.");
-        m.put("N_3", "Sometimes my mood drops for no clear reason, and motivation fades.");
-        m.put("N_4", "I am easily hurt or irritated by small comments or situations.");
-        m.put("N_5", "My mood can shift quickly, from feeling fine to heavy or anxious.");
-        m.put("E_1", "At gatherings or events, I tend to start conversations and energize the atmosphere.");
-        m.put("E_2", "I do not feel much burden when starting conversations or leading topics.");
-        m.put("E_3", "I feel energized in situations with new people.");
-        m.put("E_4", "Spending time with friends or colleagues often improves and restores my mood.");
-        m.put("E_5", "I am generally comfortable speaking and moving in group settings.");
-        m.put("O_1", "When I encounter new ideas or methods, I become curious and want to explore them.");
-        m.put("O_2", "When reading or imagining, vivid scenes and stories form in my mind.");
-        m.put("O_3", "Artworks or natural scenery often leave lasting impressions and thoughts in me.");
-        m.put("O_4", "On any topic, I try to consider opposing views and different perspectives.");
-        m.put("O_5", "When unfamiliar areas come up, I usually feel a desire to learn.");
-        m.put("A_1", "I tend to approach people with basic trust, even when meeting them for the first time.");
-        m.put("A_2", "In collaborative work, I am willing to adjust if it helps the team.");
-        m.put("A_3", "I try to understand others by considering their perspective.");
-        m.put("A_4", "When opinions conflict, I prefer finding harmony over fighting.");
-        m.put("A_5", "If someone seems to be struggling, I look for helpful words or actions.");
-        m.put("C_1", "When I have tasks to do, I try to start promptly rather than delay.");
-        m.put("C_2", "For major tasks, I tend to break them into steps, plan, and execute.");
-        m.put("C_3", "I try to complete assigned work and pay attention to details.");
-        m.put("C_4", "When I set a goal, I tend to keep working steadily until I reach it.");
-        m.put("C_5", "I try to keep promises and follow rules whenever possible.");
-        return m;
+        for (String facet : NeoScaleInterpretation.FACET_ORDER) {
+            String key = facet + "_1";
+            String v = NEO_DETAIL_ITEMS_EN.get(key);
+            if (v != null) {
+                m.put(key, v);
+            }
+        }
+        return Map.copyOf(m);
     }
 
-    private static Map<Integer, String> buildResilienceItemsEn() {
-        Map<Integer, String> m = new LinkedHashMap<>();
-        m.put(1, "When difficulties arise, I tend to reflect on causes and adapt my approach to overcome them.");
-        m.put(2, "After failure, I usually think \"Let's try once more\" and attempt again.");
-        m.put(3, "Even under stress, I adapt by taking breaks or splitting tasks.");
-        m.put(4, "Even in hard times, I try to keep believing things will work out.");
-        m.put(5, "When problems occur, I look for causes and start with what I can solve.");
-        m.put(6, "Even when plans change or the future is uncertain, I try to cope rather than panic.");
-        m.put(7, "I feel that I have people I can rely on when things are hard.");
-        m.put(8, "In difficult periods, I tend to believe \"It will eventually be okay.\"");
-        m.put(9, "I believe difficult experiences can still lead to learning and growth.");
-        m.put(10, "When small things go well, I tend to feel appreciation and a sense of accomplishment.");
-        m.put(11, "After setbacks, I usually regain momentum within a short time.");
-        m.put(12, "Even when anxious, I can gather information and make difficult decisions.");
-        m.put(13, "Under pressure, I try to pause, breathe, and respond calmly.");
-        m.put(14, "Even when goals collapse, I tend to rebuild them and move forward.");
-        m.put(15, "I feel I can ask people around me for support when needed.");
-        m.put(16, "I feel I have past experiences of overcoming similar difficulties.");
-        m.put(17, "When given a new environment or role, I adapt without taking too long.");
-        m.put(18, "I often feel confident that I can get through challenges.");
-        m.put(19, "Even in hardship, I try to find meaning and possible gains.");
-        m.put(20, "Looking across life domains, I generally feel satisfied.");
-        return m;
+    private static String resilienceItemEnglish(String assessmentName, int itemNumber, String originalText) {
+        boolean detailed = assessmentName.contains("상세");
+        if (detailed) {
+            if (itemNumber >= 1 && itemNumber <= KRQ53_ITEMS_EN.length) {
+                return KRQ53_ITEMS_EN[itemNumber - 1];
+            }
+        } else {
+            if (itemNumber >= 1 && itemNumber <= KRQ_SHORT_TO_FULL_INDEX.length) {
+                return KRQ53_ITEMS_EN[KRQ_SHORT_TO_FULL_INDEX[itemNumber - 1]];
+            }
+        }
+        return originalText;
+    }
+
+    private static String[] buildKrq53ItemsEn() {
+        return new String[]{
+                "When difficulties arise, I can control my emotions.",
+                "When I have a thought, I notice well how it affects my mood.",
+                "When debating important issues with family or friends, I can control my emotions well.",
+                "When I have important work that requires focus, I feel more stressed than energized.",
+                "I get swept up by my emotions.",
+                "Sometimes emotional issues make it hard for me to concentrate at school or work.",
+                "When I have an urgent task, I overcome temptations or distractions and get it done.",
+                "No matter how confusing or difficult a situation is, I am usually aware of what I am thinking.",
+                "When someone is angry at me, I first listen carefully to their point of view.",
+                "When things do not go as planned, I tend to give up easily.",
+                "I usually live without a clear plan for spending or expenses.",
+                "I tend to handle things spontaneously rather than planning ahead.",
+                "When a problem arises, I think about possible solutions first, then try to solve it.",
+                "When a difficult situation occurs, I think carefully about the causes, then try to address it.",
+                "In most situations, I believe I know the causes of problems well.",
+                "I often hear that I do not grasp events or situations well.",
+                "I often hear that I jump to conclusions when problems arise.",
+                "When a difficult situation occurs, I think it is better to solve it quickly even if I have not fully understood the causes.",
+                "Depending on the mood or my partner, I can guide conversations well.",
+                "I am good at witty humor.",
+                "I find appropriate words or phrases for what I want to say.",
+                "Talking with people in authority feels burdensome to me.",
+                "Sometimes I miss parts of a conversation because I am thinking of something else.",
+                "Sometimes I hesitate and cannot say everything I want to say.",
+                "Looking at people's facial expressions, I can tell what emotion they are feeling.",
+                "When I see someone sad, angry, or flustered, I can tell pretty well what they are thinking.",
+                "When a colleague is angry, I usually understand the reason fairly well.",
+                "I sometimes find it hard to understand how people behave.",
+                "I often hear from close friends, partners, or spouses that I do not understand them.",
+                "Colleagues and friends say I do not listen well to what they say.",
+                "I receive love and attention from people around me.",
+                "I truly like my friends.",
+                "People around me understand my feelings well.",
+                "I have few friends with whom I help each other mutually.",
+                "People I meet regularly mostly end up disliking me.",
+                "I have almost no friends I can open up to honestly.",
+                "I believe that if I work hard, there will always be rewards.",
+                "Right or wrong, I think it is good to first believe that I can solve any difficult problem.",
+                "Even in difficult situations, I am confident that everything will be resolved well.",
+                "After I finish something, I worry that people around me may evaluate me negatively.",
+                "I believe most problems I face are caused by situations beyond my control.",
+                "When someone asks about my future, it is hard for me to imagine succeeding.",
+                "My life is close to the ideal life I imagine.",
+                "I am satisfied with various conditions in my life.",
+                "I am satisfied with my life.",
+                "I already have most of what I consider important in life.",
+                "If I were born again, I would want to live my current life again.",
+                "I feel grateful to many different kinds of people.",
+                "If I wrote down everything I am grateful for, the list would be very long.",
+                "As I age, I feel more gratitude for people, events, and experiences that are part of my life.",
+                "I have little to be thankful for.",
+                "When I look at the world, there is not much I feel grateful for.",
+                "It takes me a long time before I feel gratitude toward people or things."
+        };
     }
 
     private static Map<String, String> buildTciDetailItemsEn() {
@@ -548,63 +588,74 @@ public final class LocalizationTexts {
         return m;
     }
 
+    /**
+     * NEO 상세(58문항): 하위척도 코드 N1..C6 × 척도당 2문항. 키는 {@code N1_1}, {@code N1_2} … (NeoMigrationRunner 순서).
+     */
     private static Map<String, String> buildNeoDetailItemsEn() {
         Map<String, String> m = new LinkedHashMap<>();
-        m.put("N_1", "I often feel worry or anxiety.");
-        m.put("N_2", "I am easily shaken when under stress.");
-        m.put("N_3", "There are times when I feel depressed.");
-        m.put("N_4", "I get irritated easily over small matters.");
-        m.put("N_5", "My emotions tend to fluctuate.");
-        m.put("N_6", "When I feel anxious, my sleep is easily disturbed.");
-        m.put("N_7", "I tend to be sensitive to criticism.");
-        m.put("N_8", "I often feel weighed down by worry.");
-        m.put("N_9", "I find it hard to change my mood once it drops.");
-        m.put("N_10", "I worry about being at a disadvantage.");
+        m.put("N1_1", "I often feel anxious, restless, tense, and preoccupied with fear or worry.");
+        m.put("N1_2", "I tend to be someone who frequently feels anxious, tense, and worried.");
+        m.put("N2_1", "I am sensitive to criticism and often feel frustration, resentment, or anger.");
+        m.put("N2_2", "I tend to react with irritation or anger when I feel criticized or thwarted.");
+        m.put("N3_1", "I often feel lethargic, guilty when things go wrong, easily discouraged, or suddenly sad.");
+        m.put("N3_2", "I tend to lose motivation, feel hopeless, or sink into low moods.");
+        m.put("N4_1", "I am quick-tempered, act before I think, and often regret impulsive words or actions.");
+        m.put("N4_2", "I have trouble controlling impulses and later regret what I said or did.");
+        m.put("N5_1", "I lack confidence in myself and fear being ridiculed or mocked in social situations.");
+        m.put("N5_2", "I worry a lot about whether others look down on me in groups.");
+        m.put("N6_1", "Intrusive memories or images of upsetting past events return and make me anxious.");
+        m.put("N6_2", "I try to avoid reminders of frightening or shocking experiences I went through.");
+        m.put("N7_1", "Even small stresses overwhelm me; I feel desperate, torn, and look for someone to help.");
+        m.put("N7_2", "I do not cope well with pressure and quickly feel hopeless or trapped.");
+        m.put("N8_1", "I keep emotional distance, stay in the background, and my thinking can feel vague or unusual.");
+        m.put("N8_2", "I tend not to engage much with others' feelings or behavior and withdraw instead.");
+        m.put("N9_1", "I resist rules or conventions and am critical of traditional social, political, or religious values.");
+        m.put("N9_2", "I tend to be skeptical of authority and comfortable questioning established norms.");
+        m.put("N10_1", "I lack confidence, often feel inferior, low in energy, and see myself as weak.");
+        m.put("N10_2", "I tend to doubt my worth and view myself negatively.");
 
-        m.put("E_1", "I feel comfortable in gatherings with many people.");
-        m.put("E_2", "I tend to initiate conversations first.");
-        m.put("E_3", "I am generally energetic.");
-        m.put("E_4", "I feel good when I am with other people.");
-        m.put("E_5", "I am active and sociable.");
-        m.put("E_6", "I tend to lead conversations.");
-        m.put("E_7", "I prefer being with others to being alone.");
-        m.put("E_8", "I become comfortable with unfamiliar people relatively easily.");
-        m.put("E_9", "I actively participate in interesting activities.");
-        m.put("E_10", "I am comfortable speaking in front of people.");
+        m.put("E1_1", "I prefer being alone to socializing and my relationships feel monotonous.");
+        m.put("E1_2", "I tend to be more comfortable alone and feel my social life is routine or flat.");
+        m.put("E2_1", "I am assertive, persuasive, and often take a leadership role in conversations.");
+        m.put("E2_2", "I tend to speak up confidently and influence others when we interact.");
+        m.put("E3_1", "I prefer complex, adventurous environments and enjoy intense sports or stimulating play.");
+        m.put("E3_2", "I tend to seek excitement, novelty, and physically or mentally stimulating activities.");
+        m.put("E4_1", "I am busy, active, flexible, proactive, and quick to move.");
+        m.put("E4_2", "I tend to keep a fast pace and stay on the go in daily life.");
 
-        m.put("O_1", "I am highly interested in new ideas and experiences.");
-        m.put("O_2", "I tend to have rich imagination.");
-        m.put("O_3", "I enjoy appreciating art and nature.");
-        m.put("O_4", "I try to think from various perspectives.");
-        m.put("O_5", "I am curious and willing to learn.");
-        m.put("O_6", "I am interested in abstract or philosophical topics.");
-        m.put("O_7", "I enjoy trying new foods and cultures.");
-        m.put("O_8", "I enjoy creative activities and expression.");
-        m.put("O_9", "I am open to experiences different from daily routine.");
-        m.put("O_10", "I sometimes think about ideals and values.");
+        m.put("O1_1", "I enjoy fantasy, have rich imagination and creativity, and often have unusual ideas.");
+        m.put("O1_2", "I tend to think in original, inventive ways and like imaginative exploration.");
+        m.put("O2_1", "I appreciate pure art and natural beauty and value lived experience.");
+        m.put("O2_2", "I tend to seek beauty in art and nature and care about aesthetic experience.");
+        m.put("O3_1", "I feel emotions deeply and take my own and others' feelings seriously.");
+        m.put("O3_2", "I am emotionally sensitive and attuned to subtle emotional nuances.");
+        m.put("O4_1", "I try new behaviors, adapt easily, and want a variety of hobbies.");
+        m.put("O4_2", "I tend to experiment, pick up new interests, and adapt quickly to change.");
 
-        m.put("A_1", "I tend to trust other people easily.");
-        m.put("A_2", "I like cooperating with others.");
-        m.put("A_3", "I try to understand others' perspectives.");
-        m.put("A_4", "I prefer harmony over conflict.");
-        m.put("A_5", "I am generally considerate.");
-        m.put("A_6", "I tend to accept others rather than blame them quickly.");
-        m.put("A_7", "I feel happy about other people's success.");
-        m.put("A_8", "I try to act honestly and fairly.");
-        m.put("A_9", "I choose cooperation over competition.");
-        m.put("A_10", "I tend to notice and understand others' emotions.");
+        m.put("A1_1", "I am caring, warm, kind in relationships, and eager to help others actively.");
+        m.put("A1_2", "I tend to nurture others and take their well-being to heart.");
+        m.put("A2_1", "I believe people approach me in good faith; I am straightforward and seldom suspicious.");
+        m.put("A2_2", "I tend to give others the benefit of the doubt and rarely distrust them.");
+        m.put("A3_1", "I actively care about others' happiness, cooperate, am devoted, and act in a service-oriented way.");
+        m.put("A3_2", "I tend to put energy into helping others succeed and feel fulfilled.");
+        m.put("A4_1", "I forgive others' mistakes readily, understand generously, and hold back anger.");
+        m.put("A4_2", "I tend to be lenient when people slip up and let go of resentment.");
+        m.put("A5_1", "I do not boast or show off; I praise others and stay humble.");
+        m.put("A5_2", "I tend to downplay my accomplishments and lift others up.");
 
-        m.put("C_1", "I tend not to postpone tasks I need to do.");
-        m.put("C_2", "I usually make plans and execute them.");
-        m.put("C_3", "I am detail-oriented and responsible.");
-        m.put("C_4", "I work steadily toward goals.");
-        m.put("C_5", "I generally follow rules well.");
-        m.put("C_6", "I finish tasks to completion.");
-        m.put("C_7", "I use my time in a planned way.");
-        m.put("C_8", "I pay attention to details.");
-        m.put("C_9", "I keep putting effort into achieving goals.");
-        m.put("C_10", "I tend to keep promises.");
-        return m;
+        m.put("C1_1", "I see myself as capable and efficient, with strong self-confidence.");
+        m.put("C1_2", "I tend to feel competent and effective in what I take on.");
+        m.put("C2_1", "I have strong achievement motivation, high aspirations, and work steadily toward goals.");
+        m.put("C2_2", "I tend to set ambitious goals and push myself to succeed in a disciplined way.");
+        m.put("C3_1", "I keep my life tidy and organized, make plans, and follow through carefully.");
+        m.put("C3_2", "I tend to rely on schedules, neatness, and careful follow-through.");
+        m.put("C4_1", "I hold to my ethical principles and finish what I start with persistence.");
+        m.put("C4_2", "I tend to honor commitments and stick with tasks until they are done.");
+        m.put("C5_1", "I resist temptation, curb impulses, and work steadily toward long-term goals.");
+        m.put("C5_2", "I tend to control immediate urges and stay focused on what matters.");
+        m.put("C6_1", "I decide carefully after weighing details and anticipate future risks.");
+        m.put("C6_2", "I tend to think things through thoroughly before acting and plan for pitfalls.");
+        return Map.copyOf(m);
     }
 
     private LocalizationTexts() {}

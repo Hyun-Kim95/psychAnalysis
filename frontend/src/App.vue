@@ -1,31 +1,35 @@
 <template>
   <div id="app-root">
-    <header class="app-header">
-      <h1 class="app-title">{{ t('appTitle') }}</h1>
-      <p class="app-subtitle">{{ t('appSubtitle') }}</p>
-      <div class="lang-switch">
-        <button
-          type="button"
-          class="lang-btn"
-          :class="{ active: locale === 'ko' }"
-          @click="setLocale('ko')"
-        >
-          {{ t('languageKorean') }}
-        </button>
-        <button
-          type="button"
-          class="lang-btn"
-          :class="{ active: locale === 'en' }"
-          @click="setLocale('en')"
-        >
-          {{ t('languageEnglish') }}
-        </button>
+    <header class="pa-topnav" aria-label="Main">
+      <div class="pa-topnav-inner">
+        <router-link to="/" class="pa-brand">{{ t('appTitle') }}</router-link>
+
+        <div class="pa-topnav-actions">
+          <div class="lang-switch lang-switch--nav" role="group" aria-label="Language">
+            <button
+              type="button"
+              class="lang-btn"
+              :class="{ active: locale === 'ko' }"
+              @click="setLocale('ko')"
+            >
+              {{ t('languageKorean') }}
+            </button>
+            <button
+              type="button"
+              class="lang-btn"
+              :class="{ active: locale === 'en' }"
+              @click="setLocale('en')"
+            >
+              {{ t('languageEnglish') }}
+            </button>
+          </div>
+          <router-link v-if="!isAdminRoute" to="/admin" class="pa-nav-admin-btn">
+            {{ t('navAdminLogin') }}
+          </router-link>
+          <router-link v-else to="/" class="pa-nav-secondary-btn">{{ t('goTestHome') }}</router-link>
+        </div>
       </div>
     </header>
-
-    <nav v-if="isAdminRoute" class="app-nav">
-      <router-link to="/" class="nav-btn">{{ t('goTestHome') }}</router-link>
-    </nav>
 
     <main class="app-main">
       <router-view />
@@ -45,22 +49,27 @@ const { locale, setLocale, t } = useI18n()
 
 <style scoped>
 .lang-switch {
-  margin-top: 8px;
   display: inline-flex;
   gap: 6px;
+  align-items: center;
+}
+.lang-switch--nav {
+  margin-top: 0;
 }
 .lang-btn {
-  border: 1px solid var(--border-color, #d0d7de);
-  background: #fff;
-  color: #334155;
+  border: 1px solid var(--pa-border, #e6e8ea);
+  background: var(--pa-bg-elevated, #fff);
+  color: var(--pa-text-muted, #64748b);
   border-radius: 999px;
   padding: 4px 10px;
   font-size: 12px;
   cursor: pointer;
+  font-family: var(--pa-font-heading, system-ui, sans-serif);
+  font-weight: 500;
 }
 .lang-btn.active {
-  background: #0f172a;
+  background: var(--pa-brand, #00288e);
   color: #fff;
-  border-color: #0f172a;
+  border-color: var(--pa-brand, #00288e);
 }
 </style>

@@ -8,7 +8,7 @@ public class AdminDashboardChartsPayload {
 
     private String chartAssessment;
     private String chartAvgScore;
-    private String chartReliability;
+    private String chartDailySubmissions;
     private String chartTScore;
 
     public String getChartAssessment() {
@@ -27,12 +27,12 @@ public class AdminDashboardChartsPayload {
         this.chartAvgScore = chartAvgScore;
     }
 
-    public String getChartReliability() {
-        return chartReliability;
+    public String getChartDailySubmissions() {
+        return chartDailySubmissions;
     }
 
-    public void setChartReliability(String chartReliability) {
-        this.chartReliability = chartReliability;
+    public void setChartDailySubmissions(String chartDailySubmissions) {
+        this.chartDailySubmissions = chartDailySubmissions;
     }
 
     public String getChartTScore() {

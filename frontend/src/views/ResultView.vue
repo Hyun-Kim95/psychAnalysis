@@ -8,8 +8,32 @@
       <p>{{ error }}</p>
     </div>
 
-    <div v-else-if="data" class="card">
-      <h2 class="result-title">{{ data.assessmentName ? t('resultSummaryTitleWithName', { name: data.assessmentName }) : t('resultSummaryTitleDefault') }}</h2>
+    <div v-else-if="data" class="card pa-result-card">
+      <nav class="pa-result-breadcrumb" aria-label="Breadcrumb">
+        <router-link to="/" class="pa-crumb-link">{{ t('resultBreadcrumbHome') }}</router-link>
+        <span class="pa-crumb-sep" aria-hidden="true">/</span>
+        <span class="pa-crumb-current">{{ t('resultBreadcrumbCurrent') }}</span>
+      </nav>
+
+      <div class="pa-result-header">
+        <h2 class="result-title pa-result-title">
+          {{
+            data.assessmentName
+              ? t('resultSummaryTitleWithName', { name: data.assessmentName })
+              : t('resultSummaryTitleDefault')
+          }}
+        </h2>
+        <div class="pa-result-actions--header">
+          <button
+            v-if="props.resultId"
+            type="button"
+            class="primary-btn"
+            @click="downloadPdf"
+          >
+            {{ t('downloadPdf') }}
+          </button>
+        </div>
+      </div>
 
       <div class="result-summary">
         <div class="summary-item">
@@ -37,6 +61,22 @@
         <p class="result-chart-hint">
           {{ t('resultChartHint') }}
         </p>
+        <div v-if="showDimensionalMatrix" class="pa-result-dim-matrix-wrap">
+          <div class="pa-result-dim-matrix-header">
+            <h4 class="pa-result-dim-matrix-title">{{ t('resultDimMatrixTitle') }}</h4>
+            <span class="pa-result-dim-matrix-badge">{{ t('resultDimMatrixBadge') }}</span>
+          </div>
+          <p class="result-chart-hint pa-result-dim-matrix-hint">
+            {{ t('resultDimMatrixHint') }}
+          </p>
+          <div
+            class="pa-result-radar-canvas-wrap"
+            role="img"
+            :aria-label="t('resultDimMatrixTitle')"
+          >
+            <canvas ref="chartRadarCanvas" />
+          </div>
+        </div>
         <div class="result-charts result-charts--single">
           <div class="result-chart-wrap">
             <div class="result-chart-canvas" :style="{ height: chartHeightPx + 'px' }">
@@ -115,14 +155,6 @@
       </p>
 
       <div class="result-actions">
-        <button
-          v-if="props.resultId"
-          type="button"
-          class="primary-btn"
-          @click="downloadPdf"
-        >
-          {{ t('downloadPdf') }}
-        </button>
         <button type="button" class="secondary-btn" @click="goMain">
           {{ t('goMain') }}
         </button>
@@ -136,7 +168,7 @@ import { Chart } from 'chart.js/auto'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { downloadUserResultPdf, fetchResult, TCI_SCALE_ORDER, type ResultViewData } from '../api'
-import { useI18n } from '../i18n'
+import { locale, useI18n } from '../i18n'
 
 const router = useRouter()
 
@@ -150,6 +182,7 @@ const data = ref<ResultViewData | null>(null)
 const { t } = useI18n()
 
 const chartTScoreCanvas = ref<HTMLCanvasElement | null>(null)
+const chartRadarCanvas = ref<HTMLCanvasElement | null>(null)
 let chartInstances: Chart[] = []
 
 const scaleOrder = computed(() => data.value?.scaleOrder?.length ? data.value.scaleOrder! : [...TCI_SCALE_ORDER])
@@ -184,6 +217,9 @@ const chartHeightPx = computed(() => {
   return Math.min(900, Math.max(200, 40 + n * 28))
 })
 
+/** Figma Result: 척도가 많을 때 dimensional matrix(레이더) */
+const showDimensionalMatrix = computed(() => orderedScaleCodes.value.length >= 5)
+
 function scaleLabel(code: string) {
   const names = data.value?.scaleDisplayNames
   return (names && names[code]) ? `${names[code]} (${code})` : code
@@ -202,10 +238,11 @@ function hasScaleData(code: string) {
   )
 }
 
+/** Figma 브랜드 톤에 맞춘 T점수 막대 색 */
 function tScoreBarColor(t: number) {
-  if (t < 40) return 'rgba(59, 130, 246, 0.82)'
-  if (t > 60) return 'rgba(245, 158, 11, 0.82)'
-  return 'rgba(107, 114, 128, 0.72)'
+  if (t < 40) return 'rgba(0, 40, 142, 0.82)'
+  if (t > 60) return 'rgba(180, 83, 9, 0.82)'
+  return 'rgba(100, 116, 139, 0.72)'
 }
 
 function destroyResultCharts() {
@@ -271,7 +308,7 @@ function buildResultCharts() {
             max: Math.ceil((tMax + pad) / 5) * 5,
             grid: {
               color: (ctx) => {
-                if (ctx.tick.value === 50) return 'rgba(99, 102, 241, 0.5)'
+                if (ctx.tick.value === 50) return 'rgba(0, 40, 142, 0.45)'
                 return 'rgba(0,0,0,0.06)'
               },
               lineWidth: (ctx) => (ctx.tick.value === 50 ? 2 : 1),
@@ -289,6 +326,95 @@ function buildResultCharts() {
     })
     chartInstances.push(chart)
     chart.resize()
+  }
+
+  /* Figma: Dimensional matrix — 원형 그리드 레이더, 규준 T=50 점선 다각형 */
+  if (codes.length >= 5 && chartRadarCanvas.value) {
+    const tRadar = tValues.map((v) => {
+      const n = typeof v === 'number' ? v : Number(v)
+      if (!Number.isFinite(n)) return 50
+      return Math.min(80, Math.max(20, n))
+    })
+    const normRing = codes.map(() => 50)
+    const radar = new Chart(chartRadarCanvas.value, {
+      type: 'radar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: t('resultDimMatrixNormLine'),
+            data: normRing,
+            borderColor: 'rgba(0, 40, 142, 0.28)',
+            backgroundColor: 'transparent',
+            borderDash: [5, 5],
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            borderWidth: 1.5,
+            fill: false,
+          },
+          {
+            label: t('tScore'),
+            data: tRadar,
+            borderColor: 'rgba(0, 40, 142, 0.95)',
+            backgroundColor: 'rgba(0, 40, 142, 0.2)',
+            pointBackgroundColor: 'rgba(0, 40, 142, 1)',
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 1.5,
+            pointRadius: 4,
+            pointHoverRadius: 5,
+            borderWidth: 2.5,
+            fill: true,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            filter: (ctx) => ctx.datasetIndex === 1,
+            callbacks: {
+              title: (items: { dataIndex: number }[]) => {
+                const i = items[0]?.dataIndex ?? 0
+                return scaleLabel(codes[i])
+              },
+              label: (ctx) => `${t('tScore')}: ${ctx.formattedValue}`,
+            },
+          },
+        },
+        scales: {
+          r: {
+            min: 20,
+            max: 80,
+            ticks: {
+              stepSize: 10,
+              showLabelBackdrop: false,
+              color: 'rgba(100, 116, 139, 0.85)',
+              backdropColor: 'transparent',
+            },
+            grid: {
+              circular: true,
+              color: 'rgba(148, 163, 184, 0.4)',
+            },
+            angleLines: {
+              color: 'rgba(148, 163, 184, 0.5)',
+            },
+            pointLabels: {
+              font: {
+                size: 11,
+                family: "'Manrope', system-ui, -apple-system, sans-serif",
+                weight: 600,
+              },
+              color: '#191c1e',
+              padding: 10,
+            },
+          },
+        },
+      },
+    })
+    chartInstances.push(radar)
+    radar.resize()
   }
 }
 
@@ -310,12 +436,14 @@ watch(
 
 onBeforeUnmount(destroyResultCharts)
 
-onMounted(async () => {
+async function loadResult() {
   if (!props.resultId) {
     error.value = t('resultIdMissing')
     loading.value = false
     return
   }
+  loading.value = true
+  error.value = null
   try {
     data.value = await fetchResult(props.resultId)
   } catch (e) {
@@ -323,7 +451,11 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(loadResult)
+watch(locale, loadResult)
+watch(() => props.resultId, loadResult)
 
 async function downloadPdf() {
   if (!props.resultId) return

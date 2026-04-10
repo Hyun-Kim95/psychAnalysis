@@ -1,40 +1,88 @@
 <template>
-  <section class="assessment-list">
-    <div v-if="loading" class="card">
-      <p>{{ t('loadingAssessmentList') }}</p>
-    </div>
-
-    <div v-else-if="error" class="card card-error">
-      <p>{{ error }}</p>
-    </div>
-
-    <div v-else class="card">
-      <p class="intro-desc">{{ t('listChooseVersion') }}</p>
-
-      <ul class="assessment-cards">
-        <li
-          v-for="group in assessmentGroups"
-          :key="group.baseName"
-          class="assessment-card assessment-card--group"
-        >
-          <h3 class="assessment-card-title">{{ group.displayName }}</h3>
-          <p v-if="group.description" class="assessment-card-desc">{{ group.description }}</p>
-          <div class="assessment-card-actions">
-            <button
-              v-for="v in group.versions"
-              :key="v.assessment.id"
-              type="button"
-              class="version-btn"
-              :class="v.isDetail ? 'version-btn--detail' : 'version-btn--short'"
-              @click="select(v.assessment)"
-            >
-              {{ v.isDetail ? t('detailVersion') : t('shortVersion') }}{{ v.itemCount ? ` (${t('itemCount', { count: v.itemCount })})` : '' }}
-            </button>
+  <div class="pa-home">
+    <section class="pa-hero pa-hero-split" aria-labelledby="pa-hero-title">
+      <div class="pa-hero-inner">
+        <div class="pa-hero-grid">
+          <div class="pa-hero-col pa-hero-col--text">
+            <h1 id="pa-hero-title" class="pa-hero-title">
+              <span class="pa-hero-line pa-hero-line--1">{{ t('heroHeadline1') }}</span>
+              <span class="pa-hero-line pa-hero-line--2">{{ t('heroHeadline2') }}</span>
+            </h1>
+            <p class="pa-hero-lead">{{ t('heroLeadBody') }}</p>
+            <p class="pa-hero-note">{{ t('heroHowLead') }}</p>
           </div>
-        </li>
-      </ul>
-    </div>
-  </section>
+          <div class="pa-hero-col pa-hero-col--visual">
+            <div class="pa-hero-visual" aria-hidden="true">
+              <div class="pa-hero-blob" />
+              <img
+                class="pa-hero-img"
+                src="/images/home-hero.png"
+                width="584"
+                height="500"
+                :alt="t('homeHeroImageAlt')"
+                loading="eager"
+                decoding="async"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="pa-library" class="pa-library-section" aria-labelledby="pa-library-title">
+      <div class="pa-library-header">
+        <h2 id="pa-library-title" class="pa-library-title">{{ t('homeLibraryTitle') }}</h2>
+        <p class="pa-library-desc">{{ t('homeLibraryDesc') }}</p>
+      </div>
+
+      <div v-if="loading" class="pa-library-panel">
+        <div class="card pa-library-state">
+          <p>{{ t('loadingAssessmentList') }}</p>
+        </div>
+      </div>
+
+      <div v-else-if="error" class="pa-library-panel">
+        <div class="card card-error pa-library-state">
+          <p>{{ error }}</p>
+        </div>
+      </div>
+
+      <div v-else class="pa-library-panel">
+        <p class="pa-library-hint">{{ t('listChooseVersion') }}</p>
+
+        <ul class="assessment-cards pa-assessment-grid">
+          <li
+            v-for="group in assessmentGroups"
+            :key="group.baseName"
+            class="assessment-card assessment-card--group"
+          >
+            <h3 class="assessment-card-title">{{ group.displayName }}</h3>
+            <p v-if="group.description" class="assessment-card-desc">{{ group.description }}</p>
+            <div class="assessment-card-actions">
+              <button
+                v-for="v in group.versions"
+                :key="v.assessment.id"
+                type="button"
+                class="version-btn"
+                :class="v.isDetail ? 'version-btn--detail' : 'version-btn--short'"
+                @click="select(v.assessment)"
+              >
+                {{ v.isDetail ? t('detailVersion') : t('shortVersion')
+                }}{{ v.itemCount ? ` (${t('itemCount', { count: v.itemCount })})` : '' }}
+              </button>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <footer class="pa-site-footer">
+      <div class="pa-site-footer-inner">
+        <strong class="pa-footer-brand">{{ t('appTitle') }}</strong>
+        <p class="pa-footer-copy">{{ t('footerCopyright') }}</p>
+      </div>
+    </footer>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -97,7 +145,15 @@ const DISPLAY_NAMES_EN: Record<string, string> = {
 
 const assessmentGroups = computed(() => {
   const list = assessments.value
-  const map = new Map<string, { baseName: string; displayName: string; description: string; versions: { assessment: AssessmentSummary; itemCount: number; isDetail: boolean }[] }>()
+  const map = new Map<
+    string,
+    {
+      baseName: string
+      displayName: string
+      description: string
+      versions: { assessment: AssessmentSummary; itemCount: number; isDetail: boolean }[]
+    }
+  >()
   for (const a of list) {
     const isDetail = a.name.endsWith(' (상세)') || a.name.endsWith(' (Detailed)')
     const baseName = isDetail ? a.name.replace(/ \((상세|Detailed)\)$/, '') : a.name
@@ -112,12 +168,16 @@ const assessmentGroups = computed(() => {
     const g = map.get(baseName)!
     if (!g.description) {
       const display =
-        locale.value === 'en'
-          ? DISPLAY_DESCRIPTIONS_EN[a.name]
-          : DISPLAY_DESCRIPTIONS_KO[a.name]
-      g.description = display
-        || a.description?.replace(/\s*상세 버전.*$/, '').replace(/\s*간단 버전.*$/, '').replace(/\s*Detailed version.*$/i, '').replace(/\s*Short version.*$/i, '').trim()
-        || ''
+        locale.value === 'en' ? DISPLAY_DESCRIPTIONS_EN[a.name] : DISPLAY_DESCRIPTIONS_KO[a.name]
+      g.description =
+        display ||
+        a.description
+          ?.replace(/\s*상세 버전.*$/, '')
+          .replace(/\s*간단 버전.*$/, '')
+          .replace(/\s*Detailed version.*$/i, '')
+          .replace(/\s*Short version.*$/i, '')
+          .trim() ||
+        ''
     }
     g.versions.push({
       assessment: a,

@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="pa-user-flow">
     <AssessmentListView v-if="step === 'list'" @select="handleSelectAssessment" />
     <IntroView
       v-else-if="step === 'intro'"

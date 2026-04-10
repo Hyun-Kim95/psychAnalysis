@@ -46,17 +46,6 @@
         </div>
       </div>
 
-      <div v-if="Object.keys(reliability).length" class="result-summary" style="margin-top: 8px;">
-        <div
-          v-for="(alpha, code) in reliability"
-          :key="code"
-          class="summary-item"
-        >
-          <span class="summary-label">{{ t('adminReliability') }} ({{ code }})</span>
-          <span class="summary-value">{{ alpha.toFixed(2) }}</span>
-        </div>
-      </div>
-
       <h3 class="result-subtitle" style="margin-top: 20px;">{{ t('adminCharts') }}</h3>
       <div class="charts-grid">
         <div class="chart-wrap">
@@ -72,9 +61,10 @@
           </div>
         </div>
         <div class="chart-wrap">
-          <h4 class="chart-title">{{ t('adminChartReliability') }}</h4>
+          <h4 class="chart-title">{{ t('adminChartDailySubmissions', { days: dailySubmissionWindowDays }) }}</h4>
+          <p class="chart-subtitle">{{ t('adminChartDailySubmissionsHint') }}</p>
           <div class="chart-container">
-            <canvas ref="chartReliabilityRef"></canvas>
+            <canvas ref="chartDailySubmissionsRef"></canvas>
           </div>
         </div>
         <div class="chart-wrap">
@@ -325,7 +315,6 @@ import { Chart } from 'chart.js/auto'
 import {
   fetchAdminDashboard,
   fetchAccessLogs,
-  fetchReliability,
   fetchAdminResponses,
   fetchAdminResponseDetail,
   fetchAdminReference,
@@ -341,8 +330,6 @@ import {
   type AdminDashboardChartsPayload,
 } from '../api'
 import { useI18n } from '../i18n'
-import { formatScaleCodeForChart } from '../scaleLabels'
-
 const props = defineProps<{
   token: string | null
 }>()
@@ -353,13 +340,15 @@ const data = ref<AdminDashboardData | null>(null)
 const logs = ref<AccessLogCount[]>([])
 const responses = ref<AdminResponseSummary[]>([])
 const selectedDetail = ref<AdminResponseDetail | null>(null)
-const reliability = ref<Record<string, number>>({})
 const referenceList = ref<AssessmentReference[]>([])
 const referenceLoading = ref(false)
 const summaryDownloading = ref(false)
 const referenceDownloading = ref(false)
 const resultPdfDownloading = ref(false)
 const { t, locale } = useI18n()
+
+/** 제출 추이 차트: 오늘 포함 역산 일수 */
+const dailySubmissionWindowDays = 30
 
 const pageSize = 10
 const logsPage = ref(1)
@@ -406,7 +395,7 @@ function refTotalNorm(ref: AssessmentReference): NormRow | null {
 
 const chartAssessmentRef = ref<HTMLCanvasElement | null>(null)
 const chartAvgScoreRef = ref<HTMLCanvasElement | null>(null)
-const chartReliabilityRef = ref<HTMLCanvasElement | null>(null)
+const chartDailySubmissionsRef = ref<HTMLCanvasElement | null>(null)
 const chartTScoreRef = ref<HTMLCanvasElement | null>(null)
 
 let chartInstances: Chart<'bar'>[] = []
@@ -416,11 +405,46 @@ function destroyCharts() {
   chartInstances = []
 }
 
+function localYmd(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+/** 오늘 0시 기준 최근 `days`일(포함)의 일별 완료 건수 */
+function buildDailySubmissionSeries(resp: AdminResponseSummary[], days: number) {
+  const end = new Date()
+  end.setHours(0, 0, 0, 0)
+  const keys: string[] = []
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(end)
+    d.setDate(d.getDate() - i)
+    keys.push(localYmd(d))
+  }
+  const counts: Record<string, number> = {}
+  keys.forEach((k) => {
+    counts[k] = 0
+  })
+  resp.forEach((r) => {
+    if (r.submittedAt == null || r.submittedAt === '') return
+    const d = new Date(r.submittedAt)
+    if (Number.isNaN(d.getTime())) return
+    const k = localYmd(d)
+    if (counts[k] !== undefined) counts[k]++
+  })
+  const data = keys.map((k) => counts[k])
+  const labels = keys.map((k) => {
+    const [, mm, dd] = k.split('-')
+    return `${Number(mm)}/${Number(dd)}`
+  })
+  return { labels, data }
+}
+
 function updateCharts() {
   destroyCharts()
 
   const resp = responses.value
-  const rel = reliability.value
 
   // 1. 검사별 응답 수
   const byAssessment: Record<string, number> = {}
@@ -436,7 +460,13 @@ function updateCharts() {
       type: 'bar',
       data: {
         labels: assessmentLabels.length ? assessmentLabels : [t('noData')],
-        datasets: [{ label: t('responseCount'), data: assessmentData.length ? assessmentData : [0], backgroundColor: 'rgba(59, 130, 246, 0.7)' }],
+        datasets: [
+          {
+            label: t('responseCount'),
+            data: assessmentData.length ? assessmentData : [0],
+            backgroundColor: 'rgba(0, 40, 142, 0.72)',
+          },
+        ],
       },
       options: {
         indexAxis: 'y',
@@ -482,7 +512,11 @@ function updateCharts() {
       data: {
         labels: avgLabels.length ? avgLabels : [t('noData')],
         datasets: [
-          { label: t('averageTotalScore'), data: avgData.length ? avgData : [0], backgroundColor: 'rgba(34, 197, 94, 0.7)' },
+          {
+            label: t('averageTotalScore'),
+            data: avgData.length ? avgData : [0],
+            backgroundColor: 'rgba(13, 148, 136, 0.72)',
+          },
         ],
       },
       options: {
@@ -507,23 +541,36 @@ function updateCharts() {
     chart.resize()
   }
 
-  // 3. 척도별 신뢰도 α
-  const relKeys = Object.keys(rel)
-  const relLabels = relKeys.map((k) => formatScaleCodeForChart(k, locale.value))
-  const relData = relKeys.map((k) => rel[k])
-  if (chartReliabilityRef.value) {
-    const chart = new Chart(chartReliabilityRef.value, {
+  // 3. 최근 N일 일별 제출(완료) 건수
+  const daily = buildDailySubmissionSeries(resp, dailySubmissionWindowDays)
+  if (chartDailySubmissionsRef.value) {
+    const chart = new Chart(chartDailySubmissionsRef.value, {
       type: 'bar',
       data: {
-        labels: relLabels.length ? relLabels : [t('noData')],
-        datasets: [{ label: 'α', data: relData.length ? relData : [0], backgroundColor: 'rgba(168, 85, 247, 0.7)' }],
+        labels: daily.labels,
+        datasets: [
+          {
+            label: t('dailySubmissionCount'),
+            data: daily.data,
+            backgroundColor: 'rgba(93, 95, 239, 0.65)',
+          },
+        ],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        layout: { padding: { left: 4, right: 8, top: 6, bottom: 4 } },
         plugins: { legend: { display: false } },
         scales: {
-          y: { min: 0, max: 1 },
+          x: {
+            grid: { display: false },
+            ticks: { maxRotation: 45, minRotation: 0, autoSkip: true, maxTicksLimit: 16, font: { size: 9 } },
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { precision: 0, stepSize: 1 },
+            grid: { color: 'rgba(0, 0, 0, 0.06)' },
+          },
         },
       },
     })
@@ -551,7 +598,9 @@ function updateCharts() {
       type: 'bar',
       data: {
         labels: binLabels,
-        datasets: [{ label: t('responseCount'), data: hist, backgroundColor: 'rgba(245, 158, 11, 0.7)' }],
+        datasets: [
+          { label: t('responseCount'), data: hist, backgroundColor: 'rgba(180, 83, 9, 0.68)' },
+        ],
       },
       options: {
         responsive: true,
@@ -593,7 +642,6 @@ async function load() {
     responses.value = await fetchAdminResponses(props.token)
     logsPage.value = 1
     responsesPage.value = 1
-    reliability.value = await fetchReliability(props.token)
     loadReference()
     await nextTick()
     setTimeout(updateCharts, 150)
@@ -637,7 +685,9 @@ async function downloadAdminSummary() {
   const charts: AdminDashboardChartsPayload = {
     chartAssessment: chartAssessmentRef.value ? chartAssessmentRef.value.toDataURL('image/png') : null,
     chartAvgScore: chartAvgScoreRef.value ? chartAvgScoreRef.value.toDataURL('image/png') : null,
-    chartReliability: chartReliabilityRef.value ? chartReliabilityRef.value.toDataURL('image/png') : null,
+    chartDailySubmissions: chartDailySubmissionsRef.value
+      ? chartDailySubmissionsRef.value.toDataURL('image/png')
+      : null,
     chartTScore: chartTScoreRef.value ? chartTScoreRef.value.toDataURL('image/png') : null,
   }
   summaryDownloading.value = true
@@ -726,6 +776,12 @@ async function downloadResultPdf() {
   margin: 0 0 8px 0;
   color: var(--text-secondary, #475569);
 }
+.chart-subtitle {
+  font-size: 0.78rem;
+  margin: -4px 0 10px 0;
+  color: var(--text-muted, #64748b);
+  line-height: 1.35;
+}
 .ref-t-score-explanation {
   margin-bottom: 16px;
   padding: 12px 16px;
@@ -810,7 +866,7 @@ async function downloadResultPdf() {
   font-size: 0.85rem;
   border-radius: 999px;
   border: 1px solid var(--border-color, #e2e8f0);
-  background: #fff;
+  background: var(--card-bg, #fff);
   cursor: pointer;
 }
 .pager-btn:disabled {

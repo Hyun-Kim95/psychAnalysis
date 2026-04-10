@@ -2,6 +2,8 @@ package com.tst.psychAnalysis.admin;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.tst.psychAnalysis.assessment.Item;
+import com.tst.psychAnalysis.assessment.ItemRepository;
 import com.tst.psychAnalysis.response.ItemResponse;
 import com.tst.psychAnalysis.response.ItemResponseRepository;
 import com.tst.psychAnalysis.response.Result;
@@ -17,13 +19,16 @@ public class StatisticsService {
 
     private final ResultRepository resultRepository;
     private final ItemResponseRepository itemResponseRepository;
+    private final ItemRepository itemRepository;
     private final ObjectMapper objectMapper;
 
     public StatisticsService(ResultRepository resultRepository,
                              ItemResponseRepository itemResponseRepository,
+                             ItemRepository itemRepository,
                              ObjectMapper objectMapper) {
         this.resultRepository = resultRepository;
         this.itemResponseRepository = itemResponseRepository;
+        this.itemRepository = itemRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -106,59 +111,83 @@ public class StatisticsService {
         return sumSq / (values.size() - 1);
     }
 
+    /**
+     * 검사(assessment)별·척도별 Cronbach α.
+     * <p>
+     * 이전에는 척도 코드만으로 전역 묶음을 만들어, 검사가 둘 이상이면 문항 ID 집합이 섞여
+     * 어떤 응시도 모든 문항을 채운 것으로 나오지 않아 항상 계산이 불가했음.
+     */
     public Map<String, Double> computeCronbachAlphaByScale() {
         List<ItemResponse> responses = itemResponseRepository.findAll();
 
-        Map<String, List<ItemResponse>> byScale = responses.stream()
-                .filter(r -> r.getItem().getScale() != null)
-                .collect(Collectors.groupingBy(r -> r.getItem().getScale().getCode()));
+        Map<String, List<ItemResponse>> byAssessmentAndScale = responses.stream()
+                .filter(r -> r.getItem().getScale() != null
+                        && r.getResponseSession().getAssessment() != null)
+                .collect(Collectors.groupingBy(r -> {
+                    long aid = r.getResponseSession().getAssessment().getId();
+                    String code = r.getItem().getScale().getCode();
+                    return aid + "\u001e" + code;
+                }));
 
         Map<String, Double> result = new HashMap<>();
-        for (Map.Entry<String, List<ItemResponse>> entry : byScale.entrySet()) {
-            String scaleCode = entry.getKey();
-            Double alpha = computeCronbachAlpha(entry.getValue());
+        for (Map.Entry<String, List<ItemResponse>> entry : byAssessmentAndScale.entrySet()) {
+            List<ItemResponse> group = entry.getValue();
+            if (group.isEmpty()) {
+                continue;
+            }
+            long assessmentId = group.get(0).getResponseSession().getAssessment().getId();
+            String scaleCode = group.get(0).getItem().getScale().getCode();
+            String assessmentName = group.get(0).getResponseSession().getAssessment().getName();
+            if (assessmentName == null || assessmentName.isBlank()) {
+                assessmentName = "assessment-" + assessmentId;
+            }
+
+            List<Long> expectedItemIds = itemRepository.findByAssessmentIdOrderBySortOrderAsc(assessmentId).stream()
+                    .filter(it -> it.getScale() != null && scaleCode.equals(it.getScale().getCode()))
+                    .map(Item::getId)
+                    .toList();
+
+            Double alpha = computeCronbachAlphaForAssessmentScale(group, expectedItemIds);
             if (alpha != null) {
-                result.put(scaleCode, alpha);
+                // 프론트에서 검사명·척도명 표시용 (이름에 \u001e 는 사실상 없음)
+                String displayKey = assessmentName + "\u001e" + scaleCode;
+                result.put(displayKey, alpha);
             }
         }
         return result;
     }
 
-    private Double computeCronbachAlpha(List<ItemResponse> responses) {
-        // group by session
-        Map<UUID, List<ItemResponse>> bySession = responses.stream()
-                .collect(Collectors.groupingBy(r -> r.getResponseSession().getId()));
-
-        if (bySession.size() < 2) {
-            return null;
-        }
-
-        // distinct items for this scale
-        Set<Long> itemIds = responses.stream()
-                .map(r -> r.getItem().getId())
-                .collect(Collectors.toSet());
-
-        int k = itemIds.size();
+    /**
+     * @param expectedItemIds 해당 검사·척도의 정의상 문항 ID 목록(정렬·누락 없이 완전 응답한 세션만 사용)
+     */
+    private Double computeCronbachAlphaForAssessmentScale(List<ItemResponse> responses,
+                                                          List<Long> expectedItemIds) {
+        int k = expectedItemIds.size();
         if (k < 2) {
             return null;
         }
+        Set<Long> itemIdSet = new LinkedHashSet<>(expectedItemIds);
 
-        // build per-item score vectors
+        Map<UUID, List<ItemResponse>> bySession = responses.stream()
+                .collect(Collectors.groupingBy(r -> r.getResponseSession().getId()));
+
         Map<Long, List<Double>> itemScores = new HashMap<>();
         List<Double> totalScores = new ArrayList<>();
 
-        for (UUID sessionId : bySession.keySet()) {
-            List<ItemResponse> sessionResponses = bySession.get(sessionId);
+        for (Map.Entry<UUID, List<ItemResponse>> e : bySession.entrySet()) {
+            List<ItemResponse> sessionResponses = e.getValue();
             Map<Long, Double> scoreByItem = sessionResponses.stream()
                     .filter(r -> r.getScoredValue() != null)
-                    .collect(Collectors.toMap(r -> r.getItem().getId(), ItemResponse::getScoredValue));
+                    .collect(Collectors.toMap(r -> r.getItem().getId(), ItemResponse::getScoredValue, (a, b) -> a));
+
+            boolean complete = itemIdSet.stream().allMatch(scoreByItem::containsKey);
+            if (!complete) {
+                continue;
+            }
 
             double total = 0.0;
-            for (Long itemId : itemIds) {
-                Double v = scoreByItem.get(itemId);
-                if (v == null) {
-                    return null;
-                }
+            for (Long itemId : expectedItemIds) {
+                double v = scoreByItem.get(itemId);
                 total += v;
                 itemScores.computeIfAbsent(itemId, id -> new ArrayList<>()).add(v);
             }
@@ -170,7 +199,11 @@ public class StatisticsService {
         }
 
         double sumItemVars = 0.0;
-        for (List<Double> scores : itemScores.values()) {
+        for (Long itemId : expectedItemIds) {
+            List<Double> scores = itemScores.get(itemId);
+            if (scores == null || scores.size() < 2) {
+                return null;
+            }
             double m = mean(scores);
             sumItemVars += variance(scores, m);
         }

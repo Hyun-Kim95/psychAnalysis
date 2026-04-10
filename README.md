@@ -62,6 +62,10 @@ npm run dev
 개발 서버: **http://localhost:5173**  
 API 요청은 Vite 프록시를 통해 `http://localhost:8080`으로 전달됩니다.
 
+글로벌 스타일은 Figma 시안에 맞춘 CSS 변수(`--pa-*`)로 관리합니다. 토큰·프레임 매핑은 [docs/ui-spec.md](docs/ui-spec.md)를 참고하세요. 웹폰트는 **Manrope**, **Public Sans**(Google Fonts)를 사용합니다.
+
+홈 히어로 우측 이미지는 `frontend/public/images/home-hero.png`에 두며, Figma에서 직접 PNG를 뽑아 교체해도 됩니다(동일 경로·권장 비율 약 584×500).
+
 ### 4. 프로덕션 빌드
 
 - 백엔드: `./mvnw clean package` → `target/*.jar` 실행

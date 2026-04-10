@@ -1,5 +1,5 @@
 <template>
-  <section class="admin-flow">
+  <section class="admin-flow pa-admin-flow">
     <AdminLoginView v-if="!adminToken" @logged-in="handleAdminLoggedIn" />
     <AdminDashboardView v-else :token="adminToken" />
   </section>

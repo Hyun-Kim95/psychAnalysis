@@ -39,7 +39,17 @@ const SCALE_LABEL_KO_KRQ: Record<string, string> = {
   GR: '감사하는 태도',
 }
 
+const RELIABILITY_KEY_SEP = '\u001e'
+
+/** 척도 코드만 또는 관리자 신뢰도 키 `검사명\u001e척도코드` */
 export function formatScaleCodeForChart(code: string, loc: Locale): string {
+  const sep = code.indexOf(RELIABILITY_KEY_SEP)
+  if (sep !== -1) {
+    const assessment = code.slice(0, sep)
+    const scaleCode = code.slice(sep + RELIABILITY_KEY_SEP.length)
+    const scaleLabel = formatScaleCodeForChart(scaleCode, loc)
+    return `${assessment} · ${scaleLabel}`
+  }
   if (loc === 'en') {
     return SCALE_LABEL_EN[code] ?? code
   }

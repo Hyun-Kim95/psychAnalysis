@@ -186,6 +186,11 @@ public class ResultPdfService {
                 float lineHeight = 14;
 
                 holder = new PageHolder(cs, page, y);
+                // 해석 본문: 고정 글자 수(42) 대신 가용 페이지 너비·폰트 실측으로 줄바꿈
+                float interpBodyFont = 8f;
+                float indentW = font.getStringWidth("  ") / 1000f * interpBodyFont;
+                float interpretMaxW = pageWidth - marginLeft - marginRight - indentW - 8f;
+                float footnoteMaxW = pageWidth - marginLeft - marginRight - 8f;
                 // 척도별 해석: 공간 부족 시 새 페이지 추가하며 모두 출력
                 if (!scaleGroups.isEmpty()) {
                     for (ScaleGroupDto group : scaleGroups) {
@@ -196,12 +201,13 @@ public class ResultPdfService {
                             String label = displayNames.getOrDefault(code, code);
                             String interp = interpretations.get(code);
                             if (interp == null || interp.isEmpty()) continue;
-                            int linesNeeded = 1 + wrap(interp, 42).size();
+                            java.util.List<String> interpLines = wrapByPdfWidth(font, interp, interpBodyFont, interpretMaxW);
+                            int linesNeeded = 1 + interpLines.size();
                             holder.y = ensureSpace(document, font, margin, pageHeight, minY, holder, (int)(linesNeeded * (lineHeight - 2) + 8), pdf);
                             drawTextAt(holder.cs, font, label + " (" + code + "):", margin, holder.y, 9);
                             holder.y -= lineHeight;
-                            for (String line : wrap(interp, 42)) {
-                                drawTextAt(holder.cs, font, "  " + line, margin, holder.y, 8);
+                            for (String line : interpLines) {
+                                drawTextAt(holder.cs, font, "  " + line, margin, holder.y, interpBodyFont);
                                 holder.y -= lineHeight - 2;
                             }
                             holder.y -= 4;
@@ -213,12 +219,13 @@ public class ResultPdfService {
                         String label = displayNames.getOrDefault(code, code);
                         String interp = interpretations.get(code);
                         if (interp == null || interp.isEmpty()) continue;
-                        int linesNeeded = 1 + wrap(interp, 42).size();
+                        java.util.List<String> interpLines = wrapByPdfWidth(font, interp, interpBodyFont, interpretMaxW);
+                        int linesNeeded = 1 + interpLines.size();
                         holder.y = ensureSpace(document, font, margin, pageHeight, minY, holder, (int)(linesNeeded * (lineHeight - 2) + 8), pdf);
                         drawTextAt(holder.cs, font, label + " (" + code + "):", margin, holder.y, 9);
                         holder.y -= lineHeight;
-                        for (String line : wrap(interp, 42)) {
-                            drawTextAt(holder.cs, font, "  " + line, margin, holder.y, 8);
+                        for (String line : interpLines) {
+                            drawTextAt(holder.cs, font, "  " + line, margin, holder.y, interpBodyFont);
                             holder.y -= lineHeight - 2;
                         }
                         holder.y -= 4;
@@ -226,12 +233,13 @@ public class ResultPdfService {
                 }
                 String totalInterp = interpretations.get("TOTAL");
                 if (totalInterp != null && !totalInterp.isEmpty()) {
-                    int totalLines = 1 + wrap(totalInterp, 42).size();
+                    java.util.List<String> totalLinesList = wrapByPdfWidth(font, totalInterp, interpBodyFont, interpretMaxW);
+                    int totalLines = 1 + totalLinesList.size();
                     holder.y = ensureSpace(document, font, margin, pageHeight, minY, holder, (int)(totalLines * (lineHeight - 2) + 8), pdf);
                     drawTextAt(holder.cs, font, pdf.totalScoreTotalLabel(), margin, holder.y, 9);
                     holder.y -= lineHeight;
-                    for (String line : wrap(totalInterp, 42)) {
-                        drawTextAt(holder.cs, font, "  " + line, margin, holder.y, 8);
+                    for (String line : totalLinesList) {
+                        drawTextAt(holder.cs, font, "  " + line, margin, holder.y, interpBodyFont);
                         holder.y -= lineHeight - 2;
                     }
                     holder.y -= 4;
@@ -241,8 +249,9 @@ public class ResultPdfService {
                 holder.y -= 8;
                 String note = pdf.interpretationFootnote();
                 holder.cs.setNonStrokingColor(new Color(107, 114, 128));
-                for (String line : wrap(note, 42)) {
-                    drawTextAt(holder.cs, font, line, margin, holder.y, 9);
+                float footnoteFont = 9f;
+                for (String line : wrapByPdfWidth(font, note, footnoteFont, footnoteMaxW)) {
+                    drawTextAt(holder.cs, font, line, margin, holder.y, footnoteFont);
                     holder.y -= 12;
                 }
             } finally {
@@ -323,13 +332,20 @@ public class ResultPdfService {
         drawTextAt(cs, font, pdf.sectionTScoreBarCharts(), marginL, y, 11);
         y -= 16;
         cs.setNonStrokingColor(new Color(100, 116, 139));
-        java.util.List<String> hintLines = wrap(pdf.tScoreBarChartHint(), 58);
+        float chartHintFont = 8f;
+        float chartHintMaxW = pageWidth - marginL - marginR - 8f;
+        java.util.List<String> hintLines = wrapByPdfWidth(font, pdf.tScoreBarChartHint(), chartHintFont, chartHintMaxW);
         for (String line : hintLines) {
-            drawTextAt(cs, font, line, marginL, y, 8);
+            drawTextAt(cs, font, line, marginL, y, chartHintFont);
             y -= 10;
         }
         cs.setNonStrokingColor(Color.BLACK);
         y -= 6;
+
+        if (codes.size() >= 5) {
+            y = drawDimensionalMatrixRadar(cs, font, marginL, marginR, pageWidth, y, codes, scaleT, minAllowedY, pdf);
+            y -= 8;
+        }
 
         float panelFixed = 26 + 22 + 48 + 34 + 22;
         float avail = y - minAllowedY - 10;
@@ -349,6 +365,160 @@ public class ResultPdfService {
 
         return drawOneBarChartPanel(cs, font, marginL, totalW, y, codes, displayNames, scaleT, true,
                 0, 0, 0, 0, labelCol, rowH, labelFont, axisFont, boxPad, cornerR, pdf);
+    }
+
+    /**
+     * 결과 웹 화면과 동일: 척도 5개 이상이면 T 20~80 레이더(원형 격자·규준 50 점선·프로파일 채움).
+     */
+    private float drawDimensionalMatrixRadar(PDPageContentStream cs, PDFont font,
+                                             float marginL, float marginR, float pageWidth, float y,
+                                             List<String> codes,
+                                             Map<String, Double> scaleT, float minY,
+                                             PdfLocaleStrings pdf) throws Exception {
+        int n = codes.size();
+        if (n < 5) {
+            return y;
+        }
+
+        cs.setNonStrokingColor(new Color(30, 41, 59));
+        drawTextAt(cs, font, pdf.sectionDimensionalMatrix(), marginL, y, 11);
+        String badge = pdf.dimensionalMatrixBadge();
+        float badgeSize = 6.2f;
+        float bw = font.getStringWidth(badge) / 1000f * badgeSize;
+        float rightX = pageWidth - marginR;
+        cs.setNonStrokingColor(new Color(0, 40, 142));
+        drawTextAt(cs, font, badge, Math.max(marginL + 180, rightX - bw), y - 1, badgeSize);
+        cs.setNonStrokingColor(new Color(100, 116, 139));
+        y -= 16;
+        float matrixHintFont = 8f;
+        float matrixHintMaxW = pageWidth - marginL - marginR - 8f;
+        for (String line : wrapByPdfWidth(font, pdf.dimensionalMatrixHint(), matrixHintFont, matrixHintMaxW)) {
+            drawTextAt(cs, font, line, marginL, y, matrixHintFont);
+            y -= 10;
+        }
+        cs.setNonStrokingColor(Color.BLACK);
+        y -= 6;
+
+        float contentW = pageWidth - marginL - marginR;
+        float maxR = Math.min(102f, contentW * 0.30f);
+        float R = maxR;
+        float labelBand = Math.min(48f, 8f + n * 3.2f);
+        while (R >= 50f && (y - 2 * R - labelBand - 24 < minY)) {
+            R -= 7f;
+        }
+        if (R < 50f) {
+            return y;
+        }
+        float cx = marginL + contentW / 2f;
+        float cy = y - R - 10f;
+
+        cs.setStrokingColor(new Color(203, 213, 225));
+        cs.setLineWidth(0.45f);
+        for (int ring = 1; ring <= 4; ring++) {
+            strokeCircle(cs, cx, cy, R * ring / 4f);
+        }
+        cs.setStrokingColor(new Color(148, 163, 184));
+        cs.setLineWidth(0.65f);
+        for (int i = 0; i < n; i++) {
+            double theta = Math.PI / 2 - i * 2 * Math.PI / n;
+            float x2 = cx + R * (float) Math.cos(theta);
+            float y2 = cy + R * (float) Math.sin(theta);
+            cs.moveTo(cx, cy);
+            cs.lineTo(x2, y2);
+        }
+        cs.stroke();
+
+        double[] normT = new double[n];
+        java.util.Arrays.fill(normT, 50.0);
+        cs.setStrokingColor(new Color(0, 40, 142));
+        cs.setLineWidth(1.1f);
+        cs.setLineDashPattern(new float[]{4f, 4f}, 0);
+        strokeRadarPolygon(cs, cx, cy, R, n, normT);
+        cs.setLineDashPattern(new float[]{}, 0);
+
+        double[] vals = new double[n];
+        for (int i = 0; i < n; i++) {
+            vals[i] = scaleT.getOrDefault(codes.get(i), 50.0);
+        }
+        cs.setNonStrokingColor(new Color(219, 234, 254));
+        fillRadarPolygon(cs, cx, cy, R, n, vals);
+        cs.setStrokingColor(new Color(0, 40, 142));
+        cs.setLineWidth(2f);
+        strokeRadarPolygon(cs, cx, cy, R, n, vals);
+
+        cs.setNonStrokingColor(new Color(0, 40, 142));
+        for (int i = 0; i < n; i++) {
+            float[] p = new float[2];
+            radarVertex(i, n, cx, cy, R, vals[i], p);
+            float pr = 3.2f;
+            cs.addRect(p[0] - pr / 2f, p[1] - pr / 2f, pr, pr);
+            cs.fill();
+        }
+        cs.setNonStrokingColor(Color.BLACK);
+
+        float labelR = R + 12f;
+        float labSize = n > 14 ? 5.2f : 6f;
+        for (int i = 0; i < n; i++) {
+            double theta = Math.PI / 2 - i * 2 * Math.PI / n;
+            float lx = cx + labelR * (float) Math.cos(theta);
+            float ly = cy + labelR * (float) Math.sin(theta);
+            String code = codes.get(i);
+            float tw = font.getStringWidth(code) / 1000f * labSize;
+            drawTextAt(cs, font, code, lx - tw / 2f, ly - labSize * 0.25f, labSize);
+        }
+
+        cs.setStrokingColor(Color.BLACK);
+        cs.setLineWidth(1f);
+        return cy - R - labelBand - 6f;
+    }
+
+    private static void radarVertex(int i, int n, float cx, float cy, float R, double t, float[] out) {
+        double clamped = Math.max(20, Math.min(80, t));
+        double rad = (clamped - 20) / 60.0 * R;
+        double theta = Math.PI / 2 - i * 2 * Math.PI / n;
+        out[0] = cx + (float) (rad * Math.cos(theta));
+        out[1] = cy + (float) (rad * Math.sin(theta));
+    }
+
+    private static void strokeRadarPolygon(PDPageContentStream cs, float cx, float cy, float R, int n, double[] tVals)
+            throws IOException {
+        for (int i = 0; i < n; i++) {
+            float[] p = new float[2];
+            radarVertex(i, n, cx, cy, R, tVals[i], p);
+            if (i == 0) {
+                cs.moveTo(p[0], p[1]);
+            } else {
+                cs.lineTo(p[0], p[1]);
+            }
+        }
+        cs.closePath();
+        cs.stroke();
+    }
+
+    private static void fillRadarPolygon(PDPageContentStream cs, float cx, float cy, float R, int n, double[] tVals)
+            throws IOException {
+        for (int i = 0; i < n; i++) {
+            float[] p = new float[2];
+            radarVertex(i, n, cx, cy, R, tVals[i], p);
+            if (i == 0) {
+                cs.moveTo(p[0], p[1]);
+            } else {
+                cs.lineTo(p[0], p[1]);
+            }
+        }
+        cs.closePath();
+        cs.fill();
+    }
+
+    private static void strokeCircle(PDPageContentStream cs, float cx, float cy, float r) throws IOException {
+        int seg = 72;
+        cs.moveTo(cx + r, cy);
+        for (int i = 1; i <= seg; i++) {
+            double a = 2 * Math.PI * i / seg;
+            cs.lineTo(cx + r * (float) Math.cos(a), cy + r * (float) Math.sin(a));
+        }
+        cs.closePath();
+        cs.stroke();
     }
 
     /**
@@ -694,6 +864,61 @@ public class ResultPdfService {
             currentY -= rowHeight;
         }
         return tableBottom;
+    }
+
+    /**
+     * 페이지 가용 너비에 맞춰 줄바꿈({@link PDFont#getStringWidth} 기준).
+     *
+     * @param maxContentWidthPt 본문 한 줄이 차지할 수 있는 최대 너비(포인트)
+     */
+    private static java.util.List<String> wrapByPdfWidth(PDFont font, String text, float fontSize, float maxContentWidthPt)
+            throws IOException {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        if (text == null || text.isEmpty()) {
+            return out;
+        }
+        final int len = text.length();
+        int i = 0;
+        while (i < len) {
+            while (i < len && text.charAt(i) == ' ') {
+                i++;
+            }
+            if (i >= len) {
+                break;
+            }
+            int j = i + 1;
+            while (j <= len) {
+                float w = font.getStringWidth(text.substring(i, j)) / 1000f * fontSize;
+                if (w > maxContentWidthPt) {
+                    break;
+                }
+                j++;
+            }
+            int end = j - 1;
+            if (end <= i) {
+                end = i + 1;
+            }
+            if (end < len) {
+                int lastGood = -1;
+                for (int k = end - 1; k > i; k--) {
+                    char c = text.charAt(k);
+                    if (c == ' ' || c == '.' || c == '。' || c == '·' || c == ')' || c == ','
+                            || c == '、' || c == ';' || c == '；' || c == ':' || c == '：') {
+                        lastGood = k;
+                        break;
+                    }
+                }
+                if (lastGood > i) {
+                    end = lastGood + 1;
+                }
+            }
+            String piece = text.substring(i, end);
+            if (!piece.isBlank()) {
+                out.add(piece.stripTrailing());
+            }
+            i = end;
+        }
+        return out;
     }
 
     /** 한 줄당 최대 글자 수로 나누기. 공백·구두점에서 끊어 단어 중간에서 잘리지 않게 함 */

@@ -186,13 +186,6 @@ export async function fetchGroupTTest(token: string, metric = 'totalT') {
   return res.data.data
 }
 
-export async function fetchReliability(token: string) {
-  const res = await axios.get<ApiResponse<Record<string, number>>>('/api/admin/stats/reliability', {
-    headers: { 'X-Admin-Token': token },
-  })
-  return res.data.data
-}
-
 /** IP·날짜·이벤트별 접속 횟수 */
 export interface AccessLogCount {
   id: number
@@ -280,7 +273,7 @@ export async function fetchAdminReference(token: string) {
 export interface AdminDashboardChartsPayload {
   chartAssessment?: string | null
   chartAvgScore?: string | null
-  chartReliability?: string | null
+  chartDailySubmissions?: string | null
   chartTScore?: string | null
 }
 

@@ -94,6 +94,21 @@ public final class PdfLocaleStrings {
                 : "막대 색(T): 파란·회색·주황(40/60 기준). 세로선 T=50. 원점수는 아래 표.";
     }
 
+    /** 결과 화면과 동일: 척도 5개 이상일 때 레이더 요약 */
+    public String sectionDimensionalMatrix() {
+        return english ? "■ Dimensional matrix" : "■ 차원 매트릭스";
+    }
+
+    public String dimensionalMatrixBadge() {
+        return english ? "NORMALIZED T-SCORES" : "정규화 T점수";
+    }
+
+    public String dimensionalMatrixHint() {
+        return english
+                ? "Shown when there are five or more scales. Radius maps T 20–80 (dashed polygon = norm 50). Filled polygon = your profile."
+                : "척도가 5개 이상일 때 표시합니다. 반경은 T 20~80(점선 다각형=규준 50), 채움=본인 프로파일입니다.";
+    }
+
     public String panelTScoreTitle() {
         return english ? "T-score" : "T 점수";
     }
@@ -160,8 +175,19 @@ public final class PdfLocaleStrings {
         return english ? "Mean total" : "평균 총점";
     }
 
-    public String adminReliabilityCronbach() {
-        return english ? "■ Scale reliability (Cronbach α)" : "■ 척도별 신뢰도 (Cronbach α)";
+    /** 요약 PDF 본문 표 — 대시보드 ‘제출 추이’와 동일 개념 */
+    public String adminDailySubmissionsByDaySection() {
+        return english
+                ? "■ Daily completed submissions (last 30 days, Asia/Seoul)"
+                : "■ 일별 제출 추이 (최근 30일, Asia/Seoul)";
+    }
+
+    public String adminColCalendarDate() {
+        return english ? "Date" : "날짜";
+    }
+
+    public String adminColCompletedThatDay() {
+        return english ? "Completed" : "완료 건수";
     }
 
     public String adminTotalTScoreDistribution() {
@@ -182,8 +208,9 @@ public final class PdfLocaleStrings {
         return english ? "Mean total score by assessment" : "검사별 평균 총점";
     }
 
-    public String chartTitleReliability() {
-        return english ? "Scale reliability (Cronbach α)" : "척도별 신뢰도 (Cronbach α)";
+    /** 요약 PDF에 삽입되는 차트 캡션 (화면: 최근 일별 제출 추이) */
+    public String chartTitleDailySubmissions() {
+        return english ? "Daily completed submissions (recent days)" : "일별 제출 추이 (최근)";
     }
 
     public String chartTitleTScoreDistribution() {

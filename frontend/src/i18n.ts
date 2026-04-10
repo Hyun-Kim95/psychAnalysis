@@ -48,7 +48,13 @@ const messages: Record<Locale, Record<string, string>> = {
     tScoreDesc1: 'T점수는 원점수를 표준화한 점수로, 평균 50, 표준편차 10을 기준으로 합니다. 규준(참조 집단)과 비교해 상대적인 위치를 나타냅니다.',
     tScoreDesc2: '50에 가까울수록 규준 집단의 평균 수준이며, 60 이상이면 상대적으로 높은 편, 40 미만이면 상대적으로 낮은 편으로 해석할 수 있습니다. 척도마다 원점수 단위가 달라도 T점수로는 서로 비교가 가능합니다.',
     resultChartTitle: '척도별 T점수 그래프',
-    resultChartHint: '막대 색: T점수 기준 — 파란색(40 미만), 회색(40~60), 주황색(60 초과). 세로 점선은 규준 평균 50입니다. 원점수는 아래 표에서 확인할 수 있습니다.',
+    resultChartHint:
+      '막대 색: T점수 기준 — 낮음(40 미만), 중간(40~60), 높음(60 초과). 세로 점선은 규준 평균 50입니다. 원점수는 아래 표에서 확인할 수 있습니다.',
+    resultDimMatrixTitle: '차원 매트릭스',
+    resultDimMatrixBadge: '정규화 T점수',
+    resultDimMatrixNormLine: '규준 평균 (T 50)',
+    resultDimMatrixHint:
+      '척도가 5개 이상일 때 표시됩니다. 각 꼭짓점은 척도, 거리는 T점수(20~80, 규준 50)입니다. 점선 다각형은 규준 평균, 채워진 선은 본인 프로파일입니다.',
     resultScaleScores: '척도별 점수 (엑셀 규준 기준)',
     scale: '척도',
     rawScore: '원점수',
@@ -74,11 +80,12 @@ const messages: Record<Locale, Record<string, string>> = {
     adminTotalCompleted: '총 검사 완료 수',
     adminTotalResults: '총 결과 리포트 수',
     adminTodayCompleted: '오늘 검사 완료 수',
-    adminReliability: '신뢰도 α',
     adminCharts: '통계 그래프',
     adminChartResponses: '검사별 응답 수',
     adminChartAvgScore: '검사별 평균 총점',
-    adminChartReliability: '척도별 신뢰도 (Cronbach α)',
+    adminChartDailySubmissions: '제출 추이 (최근 {days}일)',
+    adminChartDailySubmissionsHint: '완료 응답의 제출일(로컬 기준)을 일별로 집계합니다.',
+    dailySubmissionCount: '일별 완료 건수',
     adminChartTScoreDist: '총 T점수 분포',
     adminReferenceTitle: '검사별 기준점수 및 해석',
     adminTScoreDesc1: 'T점수는 원점수를 표준화한 점수로, 평균 50, 표준편차 10을 기준으로 합니다. 규준(참조 집단)과 비교한 상대적 위치를 나타냅니다.',
@@ -111,6 +118,26 @@ const messages: Record<Locale, Record<string, string>> = {
     noData: '(데이터 없음)',
     responseCount: '응답 수',
     averageTotalScore: '평균 총점',
+    navAdminLogin: '관리자 로그인',
+    heroHowLead:
+      '검사를 고른 뒤 소개 화면에서 문항 수·예상 시간·유의사항을 확인한 다음 시작할 수 있습니다.',
+    heroHeadline1: '표준화 척도·규준 기반',
+    heroHeadline2: '심리검사 경험',
+    heroLeadBody:
+      '문헌에 널리 쓰이는 척도와 규준 자료로 성격·정서를 살보며, 해석은 참고용이며 의학적 진단을 대신하지 않습니다.',
+    homeHeroImageAlt: '심리검사 안내 일러스트',
+    homeLibraryTitle: '검사 라이브러리',
+    homeLibraryDesc:
+      '검사를 고른 뒤 간단 또는 상세 버전으로 시작할 수 있습니다. 점수·해석은 참고용입니다.',
+    footerCopyright: '© psychAnalysis. All rights reserved.',
+    resultBreadcrumbHome: '홈',
+    resultBreadcrumbCurrent: '검사 결과',
+    testComfortNote:
+      '급하지 않게 응답해 주세요. 정답이나 오답은 없으며, 결과는 참고용으로만 활용해 주세요.',
+    testResponseHeading: '문항에 응답해 주세요',
+    testInProgress: '검사 진행',
+    testBaiRespondPrompt:
+      '각 문장은 불안할 때 흔히 나타나는 증상을 뜻합니다. 지난 한 주(오늘 포함) 동안 그 증상이 얼마나 있었는지, 아래 선택지 중에서 골라 주세요.',
   },
   en: {
     appTitle: 'Psychological Assessment',
@@ -155,7 +182,13 @@ const messages: Record<Locale, Record<string, string>> = {
     tScoreDesc1: 'A T-score is a standardized score based on a mean of 50 and a standard deviation of 10. It indicates your relative position compared to a norm group.',
     tScoreDesc2: 'A score near 50 is around the norm-group average. Scores of 60 or above are relatively high, and below 40 are relatively low. T-scores allow comparison across scales even when raw-score ranges differ.',
     resultChartTitle: 'T-score Chart by Scale',
-    resultChartHint: 'Bar colors by T-score: Blue (<40), Gray (40-60), Orange (>60). The vertical dotted line indicates the norm mean of 50. Raw scores are shown in the table below.',
+    resultChartHint:
+      'Bar colors by T-score: low (<40), mid (40–60), high (>60). The vertical dotted line indicates the norm mean of 50. Raw scores are shown in the table below.',
+    resultDimMatrixTitle: 'Dimensional matrix',
+    resultDimMatrixBadge: 'Normalized T-scores',
+    resultDimMatrixNormLine: 'Norm mean (T 50)',
+    resultDimMatrixHint:
+      'Shown when there are five or more scales. Each vertex is a scale; distance from the center reflects the T-score (20–80, norm 50). The dashed polygon is the norm mean; the filled area is your profile.',
     resultScaleScores: 'Scores by Scale (Excel Norm Basis)',
     scale: 'Scale',
     rawScore: 'Raw Score',
@@ -181,11 +214,12 @@ const messages: Record<Locale, Record<string, string>> = {
     adminTotalCompleted: 'Total Completed Assessments',
     adminTotalResults: 'Total Result Reports',
     adminTodayCompleted: "Today's Completed Assessments",
-    adminReliability: 'Reliability α',
     adminCharts: 'Statistics Charts',
     adminChartResponses: 'Responses by Assessment',
     adminChartAvgScore: 'Average Total Score by Assessment',
-    adminChartReliability: 'Reliability by Scale (Cronbach α)',
+    adminChartDailySubmissions: 'Submissions trend (last {days} days)',
+    adminChartDailySubmissionsHint: 'Daily counts of completed responses (local calendar date).',
+    dailySubmissionCount: 'Completed per day',
     adminChartTScoreDist: 'Total T-score Distribution',
     adminReferenceTitle: 'Norms and Interpretation by Assessment',
     adminTScoreDesc1: 'A T-score is a standardized score based on a mean of 50 and a standard deviation of 10, indicating your relative position compared with a norm group.',
@@ -218,6 +252,26 @@ const messages: Record<Locale, Record<string, string>> = {
     noData: '(No data)',
     responseCount: 'Response Count',
     averageTotalScore: 'Average Total Score',
+    navAdminLogin: 'Admin login',
+    heroHowLead:
+      'After you choose a test, the intro screen shows item count, estimated time, and important notes before you begin.',
+    heroHeadline1: 'Evidence-led',
+    heroHeadline2: 'psychological assessment',
+    heroLeadBody:
+      'Widely used instruments and norms help you explore personality and emotional functioning. Interpretations are for reference only and are not a medical diagnosis.',
+    homeHeroImageAlt: 'Illustration for psychological assessment guidance',
+    homeLibraryTitle: 'Assessment library',
+    homeLibraryDesc:
+      'Choose an assessment, then start with the short or detailed version. Scores and interpretations are for reference only.',
+    footerCopyright: '© psychAnalysis. All rights reserved.',
+    resultBreadcrumbHome: 'Home',
+    resultBreadcrumbCurrent: 'Result',
+    testComfortNote:
+      'Take your time. There are no right or wrong answers. Interpretations are for reference only.',
+    testResponseHeading: 'Please respond to the item',
+    testInProgress: 'Assessment in progress',
+    testBaiRespondPrompt:
+      'Each sentence describes a common symptom of anxiety. For the past week including today, choose how much you experienced it using the options below.',
   },
 }
 
@@ -230,9 +284,18 @@ function detectDefaultLocale(): Locale {
 
 export const locale = ref<Locale>(detectDefaultLocale())
 
+function syncDocumentLang(l: Locale) {
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = l === 'ko' ? 'ko' : 'en'
+  }
+}
+
+syncDocumentLang(locale.value)
+
 export function setLocale(next: Locale) {
   locale.value = next
   localStorage.setItem(STORAGE_KEY, next)
+  syncDocumentLang(next)
 }
 
 export function t(key: string, params?: Record<string, string | number>): string {
