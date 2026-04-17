@@ -23,7 +23,7 @@
               {{ t('languageEnglish') }}
             </button>
           </div>
-          <router-link v-if="!isAdminRoute" to="/admin" class="pa-nav-admin-btn">
+          <router-link v-if="!isAdminRoute && !isHomeRoute" to="/admin" class="pa-nav-admin-btn">
             {{ t('navAdminLogin') }}
           </router-link>
           <router-link v-else to="/" class="pa-nav-secondary-btn">{{ t('goTestHome') }}</router-link>
@@ -44,6 +44,7 @@ import { useI18n } from './i18n'
 
 const route = useRoute()
 const isAdminRoute = computed(() => route.path === '/admin')
+const isHomeRoute = computed(() => route.path === '/')
 const { locale, setLocale, t } = useI18n()
 </script>
 
