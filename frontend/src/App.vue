@@ -26,7 +26,7 @@
           <router-link v-if="!isAdminRoute && !isHomeRoute" to="/admin" class="pa-nav-admin-btn">
             {{ t('navAdminLogin') }}
           </router-link>
-          <router-link v-else to="/" class="pa-nav-secondary-btn">{{ t('goTestHome') }}</router-link>
+          <router-link v-if="isAdminRoute" to="/" class="pa-nav-secondary-btn">{{ t('goTestHome') }}</router-link>
         </div>
       </div>
     </header>
