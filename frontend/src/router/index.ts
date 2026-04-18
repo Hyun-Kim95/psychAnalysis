@@ -17,3 +17,12 @@ export const router = createRouter({
     { path: '/admin', name: 'admin', component: AdminFlowView },
   ],
 })
+
+const GA_MEASUREMENT_ID = 'G-B7J46GVHPG'
+
+router.afterEach((to) => {
+  const gtag = (window as Window & { gtag?: (...args: unknown[]) => void }).gtag
+  gtag?.('config', GA_MEASUREMENT_ID, {
+    page_path: to.fullPath,
+  })
+})
