@@ -34,3 +34,8 @@ build/
 
 ### Local editor history (Cursor / etc.) ###
 .history/
+
+### Machine-local paths (Obsidian ingest, Cursor hook markers) ###
+_config/obsidian-repos.json
+.obsidian-ingest.json
+.cursor/state/
