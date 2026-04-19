@@ -1,6 +1,6 @@
 package com.tst.psychAnalysis.admin;
 
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -11,11 +11,12 @@ import java.util.concurrent.ConcurrentHashMap;
 public class AdminAuthService {
 
     private final AdminUserRepository adminUserRepository;
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final PasswordEncoder passwordEncoder;
     private final Map<String, Long> tokenStore = new ConcurrentHashMap<>();
 
-    public AdminAuthService(AdminUserRepository adminUserRepository) {
+    public AdminAuthService(AdminUserRepository adminUserRepository, PasswordEncoder passwordEncoder) {
         this.adminUserRepository = adminUserRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public String login(String loginId, String password) {

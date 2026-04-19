@@ -46,6 +46,69 @@
         </div>
       </div>
 
+      <h3 class="result-subtitle" style="margin-top: 20px;">{{ t('adminBoardSection') }}</h3>
+      <div class="card" style="margin-bottom: 20px;">
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 10px">
+          <button type="button" class="secondary-btn" @click="loadBoard">{{ t('adminBoardRefresh') }}</button>
+        </div>
+        <p v-if="boardError" class="card-error" style="padding: 8px 0">{{ boardError }}</p>
+        <div v-else-if="boardLoading" style="padding: 12px">
+          <p>{{ t('boardLoadingList') }}</p>
+        </div>
+        <div v-else-if="boardRows.length === 0" style="padding: 12px">
+          <p>{{ t('boardEmpty') }}</p>
+        </div>
+        <div v-else style="overflow-x: auto">
+          <table class="scale-table admin-board-table">
+            <thead>
+              <tr>
+                <th>{{ t('adminBoardColTitle') }}</th>
+                <th>{{ t('adminBoardColDate') }}</th>
+                <th>{{ t('adminBoardColIp') }}</th>
+                <th>{{ t('adminBoardColReply') }}</th>
+                <th>{{ t('adminBoardColStatus') }}</th>
+                <th style="min-width: 220px"> </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in boardRows" :key="row.id">
+                <td>{{ row.title }}</td>
+                <td>{{ formatDateTime(row.createdAt) }}</td>
+                <td class="admin-board-ip">{{ row.submitterIp?.trim() || '—' }}</td>
+                <td>{{ row.hasAdminReply ? '✓' : '—' }}</td>
+                <td>{{ row.hidden ? t('adminBoardHiddenBadge') : t('adminBoardVisibleBadge') }}</td>
+                <td>
+                  <div style="display: flex; flex-wrap: wrap; gap: 6px">
+                    <button type="button" class="secondary-btn" @click="openBoardReply(row)">
+                      {{ t('adminBoardReply') }}
+                    </button>
+                    <button
+                      v-if="!row.hidden"
+                      type="button"
+                      class="secondary-btn"
+                      @click="toggleBoardHidden(row, true)"
+                    >
+                      {{ t('adminBoardHide') }}
+                    </button>
+                    <button
+                      v-else
+                      type="button"
+                      class="secondary-btn"
+                      @click="toggleBoardHidden(row, false)"
+                    >
+                      {{ t('adminBoardShow') }}
+                    </button>
+                    <button type="button" class="secondary-btn" @click="removeBoardPost(row.id)">
+                      {{ t('adminBoardDelete') }}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <h3 class="result-subtitle" style="margin-top: 20px;">{{ t('adminCharts') }}</h3>
       <div class="charts-grid">
         <div class="chart-wrap">
@@ -306,6 +369,53 @@
         </table>
       </div>
     </div>
+
+    <div
+      v-if="boardReplyOpen"
+      class="admin-board-reply-overlay"
+      role="dialog"
+      aria-modal="true"
+      :aria-labelledby="'board-reply-title'"
+      @click.self="closeBoardReply"
+    >
+      <div class="admin-board-reply-dialog card">
+        <h3 id="board-reply-title" class="result-subtitle">{{ t('adminBoardReplyModalTitle') }}</h3>
+        <p v-if="boardReplyLoading" style="padding: 12px 0">{{ t('boardLoadingList') }}</p>
+        <template v-else>
+          <p v-if="boardReplyDetail" class="admin-board-reply-meta">
+            <strong>{{ boardReplyDetail.title }}</strong>
+          </p>
+          <p v-if="boardReplyDetail" class="admin-board-reply-body-preview">{{ boardReplyDetail.body }}</p>
+          <label class="admin-board-reply-label">
+            <span>{{ t('adminBoardReplyPlaceholder') }}</span>
+            <textarea
+              v-model="boardReplyDraft"
+              class="admin-board-reply-textarea"
+              rows="8"
+              maxlength="8000"
+            />
+          </label>
+          <p
+            v-if="boardReplyMessage"
+            :class="boardReplyMessageIsError ? 'card-error' : 'admin-board-reply-ok'"
+            style="margin: 8px 0 0"
+          >
+            {{ boardReplyMessage }}
+          </p>
+          <div class="admin-board-reply-actions">
+            <button type="button" class="primary-btn" :disabled="boardReplySaving" @click="saveBoardReply">
+              {{ boardReplySaving ? t('boardSubmitting') : t('adminBoardReplySave') }}
+            </button>
+            <button type="button" class="secondary-btn" :disabled="boardReplySaving" @click="clearBoardReply">
+              {{ t('adminBoardReplyClear') }}
+            </button>
+            <button type="button" class="secondary-btn" :disabled="boardReplySaving" @click="closeBoardReply">
+              {{ t('adminBoardReplyClose') }}
+            </button>
+          </div>
+        </template>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -321,7 +431,14 @@ import {
   downloadAdminSummaryPdf,
   downloadAdminReferencePdf,
   downloadAdminResultPdf,
+  fetchAdminBoardPosts,
+  fetchAdminBoardPostDetail,
+  patchAdminBoardPostHidden,
+  patchAdminBoardPostReply,
+  deleteAdminBoardPost,
   type AccessLogCount,
+  type BoardAdminPostRow,
+  type BoardAdminPostDetail,
   type AdminDashboardData,
   type AdminResponseSummary,
   type AdminResponseDetail,
@@ -345,6 +462,16 @@ const referenceLoading = ref(false)
 const summaryDownloading = ref(false)
 const referenceDownloading = ref(false)
 const resultPdfDownloading = ref(false)
+const boardRows = ref<BoardAdminPostRow[]>([])
+const boardLoading = ref(false)
+const boardError = ref<string | null>(null)
+const boardReplyOpen = ref(false)
+const boardReplyLoading = ref(false)
+const boardReplySaving = ref(false)
+const boardReplyDetail = ref<BoardAdminPostDetail | null>(null)
+const boardReplyDraft = ref('')
+const boardReplyMessage = ref<string | null>(null)
+const boardReplyMessageIsError = ref(false)
 const { t, locale } = useI18n()
 
 /** 제출 추이 차트: 오늘 포함 역산 일수 */
@@ -628,6 +755,111 @@ async function loadReference() {
   }
 }
 
+async function loadBoard() {
+  if (!props.token) return
+  boardLoading.value = true
+  boardError.value = null
+  try {
+    const p = await fetchAdminBoardPosts(props.token, 0, 50)
+    boardRows.value = p.content
+  } catch {
+    boardError.value = t('adminBoardLoadError')
+    boardRows.value = []
+  } finally {
+    boardLoading.value = false
+  }
+}
+
+async function toggleBoardHidden(row: BoardAdminPostRow, hidden: boolean) {
+  if (!props.token) return
+  try {
+    await patchAdminBoardPostHidden(props.token, row.id, hidden)
+    await loadBoard()
+  } catch {
+    boardError.value = t('adminBoardLoadError')
+  }
+}
+
+async function removeBoardPost(id: string) {
+  if (!props.token) return
+  if (!window.confirm(t('adminBoardDeleteConfirm'))) return
+  try {
+    await deleteAdminBoardPost(props.token, id)
+    await loadBoard()
+  } catch {
+    boardError.value = t('adminBoardLoadError')
+  }
+}
+
+function closeBoardReply() {
+  boardReplyOpen.value = false
+  boardReplyDetail.value = null
+  boardReplyDraft.value = ''
+  boardReplyMessage.value = null
+  boardReplyMessageIsError.value = false
+  boardReplyLoading.value = false
+  boardReplySaving.value = false
+}
+
+async function openBoardReply(row: BoardAdminPostRow) {
+  if (!props.token) return
+  boardReplyMessage.value = null
+  boardReplyMessageIsError.value = false
+  boardReplyOpen.value = true
+  boardReplyLoading.value = true
+  boardReplyDetail.value = null
+  boardReplyDraft.value = ''
+  try {
+    const d = await fetchAdminBoardPostDetail(props.token, row.id)
+    boardReplyDetail.value = d
+    boardReplyDraft.value = d.adminReply ?? ''
+  } catch {
+    boardReplyMessage.value = t('adminBoardReplyError')
+    boardReplyMessageIsError.value = true
+  } finally {
+    boardReplyLoading.value = false
+  }
+}
+
+async function saveBoardReply() {
+  if (!props.token || !boardReplyDetail.value) return
+  boardReplySaving.value = true
+  boardReplyMessage.value = null
+  boardReplyMessageIsError.value = false
+  try {
+    await patchAdminBoardPostReply(props.token, boardReplyDetail.value.id, boardReplyDraft.value.trim())
+    await loadBoard()
+    closeBoardReply()
+  } catch {
+    boardReplyMessage.value = t('adminBoardReplyError')
+    boardReplyMessageIsError.value = true
+  } finally {
+    boardReplySaving.value = false
+  }
+}
+
+async function clearBoardReply() {
+  if (!props.token || !boardReplyDetail.value) return
+  if (!window.confirm(t('adminBoardReplyClearConfirm'))) return
+  boardReplySaving.value = true
+  boardReplyMessage.value = null
+  boardReplyMessageIsError.value = false
+  try {
+    await patchAdminBoardPostReply(props.token, boardReplyDetail.value.id, '')
+    boardReplyDraft.value = ''
+    await loadBoard()
+    const d = await fetchAdminBoardPostDetail(props.token, boardReplyDetail.value.id)
+    boardReplyDetail.value = d
+    boardReplyMessage.value = t('adminBoardReplySaved')
+    boardReplyMessageIsError.value = false
+  } catch {
+    boardReplyMessage.value = t('adminBoardReplyError')
+    boardReplyMessageIsError.value = true
+  } finally {
+    boardReplySaving.value = false
+  }
+}
+
 async function load() {
   if (!props.token) {
     error.value = t('tokenMissing')
@@ -643,6 +875,7 @@ async function load() {
     logsPage.value = 1
     responsesPage.value = 1
     loadReference()
+    void loadBoard()
     await nextTick()
     setTimeout(updateCharts, 150)
   } catch (e) {
@@ -876,6 +1109,88 @@ async function downloadResultPdf() {
 .pager-info {
   font-size: 0.85rem;
   color: var(--text-secondary, #64748b);
+}
+.admin-board-ip {
+  font-size: 0.85rem;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.admin-board-reply-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.45);
+}
+.admin-board-reply-dialog {
+  box-sizing: border-box;
+  width: min(560px, 100%);
+  max-width: 100%;
+  min-width: 0;
+  max-height: min(90vh, 720px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 20px;
+}
+.admin-board-reply-meta {
+  margin: 8px 0;
+  font-size: 0.95rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.admin-board-reply-body-preview {
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #475569);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+  max-height: 120px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--card-bg, #f8fafc);
+}
+.admin-board-reply-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-top: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+.admin-board-reply-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  resize: vertical;
+}
+.admin-board-reply-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+.admin-board-reply-ok {
+  color: #166534;
+  font-size: 0.9rem;
 }
 </style>
 

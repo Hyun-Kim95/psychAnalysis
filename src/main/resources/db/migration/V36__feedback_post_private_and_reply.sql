@@ -1,0 +1,4 @@
+ALTER TABLE feedback_post ADD COLUMN IF NOT EXISTS password_hash VARCHAR(60);
+ALTER TABLE feedback_post ADD COLUMN IF NOT EXISTS submitter_ip VARCHAR(45);
+ALTER TABLE feedback_post ADD COLUMN IF NOT EXISTS admin_reply VARCHAR(8000);
+ALTER TABLE feedback_post ADD COLUMN IF NOT EXISTS admin_replied_at TIMESTAMP;

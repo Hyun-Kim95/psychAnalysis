@@ -29,6 +29,8 @@
 
 DB·계정은 `src/main/resources/application.properties`에서 변경할 수 있습니다.
 
+문의 게시판 등록 IP는 `X-Forwarded-For` 등을 반영하도록 `server.forward-headers-strategy=framework`가 기본 설정되어 있습니다. Nginx 등 리버스 프록시 뒤에서 실제 클라이언트 IP를 쓰려면 프록시에서 해당 헤더를 넘기고, 신뢰할 프록시 대역만 앞단에 두는 것이 좋습니다.
+
 ## 실행 방법
 
 ### 1. 데이터베이스

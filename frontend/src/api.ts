@@ -1,9 +1,30 @@
 import axios from 'axios'
 import { locale } from './i18n'
 
-const baseURL = typeof import.meta.env.VITE_API_URL === 'string' && import.meta.env.VITE_API_URL
-  ? import.meta.env.VITE_API_URL.replace(/\/$/, '') // 끝 슬래시 제거
-  : ''
+/**
+ * 로컬 `npm run dev`에서 `VITE_API_URL`이 localhost/127.0.0.1이면 브라우저→8080 직통이 되어
+ * CORS·포트 불일치가 나기 쉬움. 이때는 baseURL을 비워 Vite 프록시(`/api` → 8080)를 쓴다.
+ * 배포 빌드·원격 API URL은 그대로 사용한다.
+ */
+function resolveAxiosBaseURL(): string {
+  const raw = typeof import.meta.env.VITE_API_URL === 'string' ? import.meta.env.VITE_API_URL.trim() : ''
+  if (!raw) return ''
+  const normalized = raw.replace(/\/+$/, '')
+  if (import.meta.env.DEV) {
+    try {
+      const u = new URL(normalized)
+      const h = u.hostname.toLowerCase()
+      if (h === 'localhost' || h === '127.0.0.1') {
+        return ''
+      }
+    } catch {
+      return normalized
+    }
+  }
+  return normalized
+}
+
+const baseURL = resolveAxiosBaseURL()
 if (baseURL) axios.defaults.baseURL = baseURL
 
 axios.interceptors.request.use((config) => {
@@ -314,6 +335,132 @@ export async function downloadAdminReferencePdf(token: string): Promise<void> {
 }
 
 /** 관리자 - 선택한 응답의 결과 PDF (검사 완료 후 다운로드 화면과 동일) */
+export interface BoardPostListItem {
+  id: string
+  title: string
+  authorDisplay: string | null
+  createdAt: string
+  hasAdminReply: boolean
+}
+
+export interface BoardPostPage {
+  content: BoardPostListItem[]
+  totalElements: number
+  totalPages: number
+  number: number
+  size: number
+}
+
+export interface BoardPostDetail {
+  id: string
+  title: string
+  body: string
+  authorDisplay: string | null
+  createdAt: string
+  adminReply: string | null
+  adminRepliedAt: string | null
+}
+
+export interface BoardPostSummary {
+  id: string
+  title: string
+  authorDisplay: string | null
+  createdAt: string
+  requiresPassword: boolean
+}
+
+export async function fetchBoardPosts(page = 0, size = 10): Promise<BoardPostPage> {
+  const res = await axios.get<ApiResponse<BoardPostPage>>('/api/board/posts', {
+    params: { page, size },
+  })
+  return res.data.data
+}
+
+export async function fetchBoardPostSummary(id: string): Promise<BoardPostSummary> {
+  const res = await axios.get<ApiResponse<BoardPostSummary>>(`/api/board/posts/${id}/summary`)
+  return res.data.data
+}
+
+export async function unlockBoardPost(id: string, password: string): Promise<BoardPostDetail> {
+  const res = await axios.post<ApiResponse<BoardPostDetail>>(`/api/board/posts/${id}/unlock`, {
+    password,
+  })
+  return res.data.data
+}
+
+export async function createBoardPost(payload: {
+  title: string
+  body: string
+  password: string
+  authorDisplay?: string | null
+}): Promise<BoardPostDetail> {
+  const res = await axios.post<ApiResponse<BoardPostDetail>>('/api/board/posts', payload)
+  return res.data.data
+}
+
+export interface BoardAdminPostRow {
+  id: string
+  title: string
+  authorDisplay: string | null
+  createdAt: string
+  hidden: boolean
+  submitterIp: string
+  hasAdminReply: boolean
+}
+
+export interface BoardAdminPostDetail {
+  id: string
+  title: string
+  body: string
+  authorDisplay: string | null
+  createdAt: string
+  hidden: boolean
+  submitterIp: string
+  adminReply: string | null
+  adminRepliedAt: string | null
+}
+
+export interface BoardAdminPostPage {
+  content: BoardAdminPostRow[]
+  totalElements: number
+  totalPages: number
+  number: number
+  size: number
+}
+
+export async function fetchAdminBoardPosts(token: string, page = 0, size = 20): Promise<BoardAdminPostPage> {
+  const res = await axios.get<ApiResponse<BoardAdminPostPage>>('/api/admin/board/posts', {
+    params: { page, size },
+    headers: { 'X-Admin-Token': token },
+  })
+  return res.data.data
+}
+
+export async function patchAdminBoardPostHidden(token: string, id: string, hidden: boolean): Promise<void> {
+  await axios.patch(
+    `/api/admin/board/posts/${id}`,
+    { hidden },
+    { headers: { 'X-Admin-Token': token } },
+  )
+}
+
+export async function deleteAdminBoardPost(token: string, id: string): Promise<void> {
+  await axios.delete(`/api/admin/board/posts/${id}`, {
+    headers: { 'X-Admin-Token': token },
+  })
+}
+
+export async function fetchAdminBoardPostDetail(token: string, id: string): Promise<BoardAdminPostDetail> {
+  const res = await axios.get<ApiResponse<BoardAdminPostDetail>>(`/api/admin/board/posts/${id}`, {
+    headers: { 'X-Admin-Token': token },
+  })
+  return res.data.data
+}
+
+export async function patchAdminBoardPostReply(token: string, id: string, reply: string): Promise<void> {
+  await axios.patch(`/api/admin/board/posts/${id}/reply`, { reply }, { headers: { 'X-Admin-Token': token } })
+}
+
 export async function downloadAdminResultPdf(token: string, resultId: string): Promise<void> {
   const res = await axios.get<Blob>(`/api/admin/results/${resultId}/pdf`, {
     headers: { 'X-Admin-Token': token },

@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
  * 기동 시 BAI 선택지·문항 반영.
  * - BAI 불안검사(간단): 11문항 (공식 1~11번, 상세와 약 2배 차이)
  * - BAI 불안검사 (상세): 21문항 (공식 전체)
- * Flyway SQL(V29~V32) 미적용 시 재시작 시 자동 실행 후 flyway_schema_history에 기록합니다.
+ * <p>V29~V32는 Flyway SQL로만 관리합니다. flyway_schema_history는 수동 INSERT하지 않습니다(체크섬 불일치 방지).
  */
 @Component
 @Order(Integer.MAX_VALUE)
@@ -30,7 +30,6 @@ public class StartupMigrationRunner implements ApplicationRunner {
                 return;
             }
             runMigration();
-            recordInFlywayHistory();
         } catch (BadSqlGrammarException ex) {
             // 초기 스키마(assessment/item/choice/norm/flyway_schema_history 등)가 없는 경우에는
             // BAI 마이그레이션을 건너뛰고 애플리케이션 기동을 계속 진행
@@ -192,22 +191,4 @@ public class StartupMigrationRunner implements ApplicationRunner {
         jdbcTemplate.update(sql, assessmentName, minItemNumber);
     }
 
-    private void recordInFlywayHistory() {
-        String[] versions = {"29", "30", "31", "32"};
-        String[] descriptions = {"choice label almost always", "bai official 21 items", "bai official 21 items repair", "choice and bai official"};
-        String[] scripts = {"V29__choice_label_almost_always.sql", "V30__bai_official_21_items.sql", "V31__bai_official_21_items_repair.sql", "V32__choice_and_bai_official.sql"};
-        for (int i = 0; i < versions.length; i++) {
-            if (alreadyInHistory(versions[i])) continue;
-            Integer nextRank = jdbcTemplate.queryForObject("SELECT COALESCE(MAX(installed_rank), 0) + 1 FROM flyway_schema_history", Integer.class);
-            jdbcTemplate.update("""
-                INSERT INTO flyway_schema_history (installed_rank, version, description, type, script, checksum, installed_by, installed_on, execution_time, success)
-                VALUES (?, ?, ?, 'SQL', ?, 0, current_user, NOW(), 0, true)
-                """, nextRank, versions[i], descriptions[i], scripts[i]);
-        }
-    }
-
-    private boolean alreadyInHistory(String version) {
-        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE version = ?", Integer.class, version);
-        return count != null && count > 0;
-    }
 }

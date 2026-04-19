@@ -44,14 +44,14 @@
 			<artifactId>openhtmltopdf-pdfbox</artifactId>
 			<version>1.0.10</version>
 		</dependency>
+		<!-- Spring Boot 4: Flyway 자동 실행은 starter 필요 (flyway-core만으로는 AutoConfiguration 미적용) -->
 		<dependency>
-			<groupId>org.flywaydb</groupId>
-			<artifactId>flyway-core</artifactId>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-flyway</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-database-postgresql</artifactId>
-			<version>11.14.1</version>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
