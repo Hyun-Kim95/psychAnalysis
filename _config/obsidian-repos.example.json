@@ -1,10 +1,10 @@
 {
   "repositories": [
     {
-      "slug": "my-cursor-template",
-      "displayName": "My Cursor template (optional)",
-      "hubFileStem": "my-template-hub",
-      "path": "d:\\cursor\\my-cursor-template",
+      "slug": "psychAnalysis",
+      "displayName": "psychAnalysis",
+      "hubFileStem": "psychAnalysis-docs-hub",
+      "path": "d:\\cursor\\psychAnalysis",
       "docsPaths": ["docs"]
     },
     {
